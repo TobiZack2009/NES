@@ -19,7 +19,7 @@ export class CPU {
         this.y = 0x00;      // Y Index
         this.stkp = 0xFD;   // Stack Pointer
         this.pc = 0x0000;   // Program Counter
-        this.status = 0x00; // Status Register
+        this.status = FLAGS.U | FLAGS.I; // Status Register
         this.cycles = 0;    // Remaining cycles for current instruction
         this.lookup = [];
         this.initOpcodeTable();
@@ -30,7 +30,7 @@ export class CPU {
         this.x = 0x00;
         this.y = 0x00;
         this.stkp = 0xFD;
-        this.status = FLAGS.U;
+        this.status = FLAGS.U | FLAGS.I;
         this.cycles = 0;
         
         // Reset vector is at $FFFC-$FFFD
@@ -56,6 +56,15 @@ export class CPU {
             P: this.status | FLAGS.U, // Always set unused bit for comparison
             PC: this.pc
         };
+    }
+
+    setState(state) {
+        this.a = state.A;
+        this.x = state.X;
+        this.y = state.Y;
+        this.stkp = state.SP;
+        this.status = state.P;
+        this.pc = state.address;
     }
     
     clock() {

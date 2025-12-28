@@ -27,7 +27,7 @@ export class CPUState {
         this.address = parseInt(addressMatch[1], 16);
 
         // Extract instruction bytes and mnemonic
-        const instrMatch = rest.match(/[0-9A-Fa-f]{4}\s+([0-9A-Fa-f\s]+?)\s+([A-Z]{3})/);
+        const instrMatch = rest.match(/[0-9A-Fa-f]{4}\s+([0-9A-Fa-f\s]+?)\s+(\*?[A-Z]{3})/);
         if (!instrMatch) {
             throw new Error(`Cannot parse instruction from: ${rest}`);
         }
@@ -36,7 +36,7 @@ export class CPUState {
         this.mnemonic = instrMatch[2];
 
         // Extract operand (everything between mnemonic and "A:")
-        const operandMatch = rest.match(/[A-Z]{3}\s+(.+?)\s+A:/);
+        const operandMatch = rest.match(/\*?[A-Z]{3}\s+(.+?)\s+A:/);
         this.operand = operandMatch ? operandMatch[1].trim() : '';
 
         // Extract register states

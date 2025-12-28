@@ -1,3 +1,5 @@
+import { Controller } from './controller.js';
+
 export class Bus {
     constructor() {
         // Internal RAM (2KB)
@@ -7,6 +9,7 @@ export class Bus {
         this.cpu = null;
         this.ppu = null;
         this.cartridge = null;
+        this.controller1 = new Controller();
         
         // System state
         this.clockCounter = 0;
@@ -18,6 +21,10 @@ export class Bus {
     
     connectPPU(ppu) {
         this.ppu = ppu;
+    }
+
+    connectController(controller) {
+        this.controller1 = controller;
     }
     
     connectCartridge(cartridge) {
@@ -33,9 +40,9 @@ export class Bus {
         } else if (addr >= 0x2000 && addr <= 0x3FFF) {
             // PPU Registers and mirrors
             return this.ppu?.readRegister(addr & 0x0007) || 0x00;
-        } else if (addr >= 0x4016 && addr <= 0x4017) {
-            // Controller registers
-            return 0x00; // TODO: Implement controllers
+        } else if (addr === 0x4016) {
+            // Controller 1
+            return this.controller1.read();
         } else if (addr >= 0x4020 && addr <= 0xFFFF) {
             // Cartridge space
             return this.cartridge?.cpuRead(addr) || 0x00;
@@ -54,9 +61,9 @@ export class Bus {
         } else if (addr >= 0x2000 && addr <= 0x3FFF) {
             // PPU Registers and mirrors
             this.ppu?.writeRegister(addr & 0x0007, data);
-        } else if (addr >= 0x4014 && addr <= 0x4016) {
-            // Controller registers
-            // TODO: Implement controllers
+        } else if (addr === 0x4016) {
+            // Controller 1
+            this.controller1.write(data);
         } else if (addr >= 0x4020 && addr <= 0xFFFF) {
             // Cartridge space
             this.cartridge?.cpuWrite(addr, data);

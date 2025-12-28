@@ -1,6 +1,60 @@
 var NESEmulator = (function (exports) {
     'use strict';
 
+    class Controller {
+        constructor() {
+            this.buttons = {
+                A: false,
+                B: false,
+                SELECT: false,
+                START: false,
+                UP: false,
+                DOWN: false,
+                LEFT: false,
+                RIGHT: false,
+            };
+            this.strobe = 0;
+            this.index = 0;
+        }
+
+        read() {
+            if (this.index > 7) {
+                return 1;
+            }
+
+            const value = this.getButtonState(this.index);
+            if (this.strobe === 0) {
+                this.index++;
+            }
+            return value;
+        }
+
+        write(data) {
+            this.strobe = data & 1;
+            if (this.strobe === 1) {
+                this.index = 0;
+            }
+        }
+
+        getButtonState(index) {
+            switch (index) {
+                case 0: return this.buttons.A ? 1 : 0;
+                case 1: return this.buttons.B ? 1 : 0;
+                case 2: return this.buttons.SELECT ? 1 : 0;
+                case 3: return this.buttons.START ? 1 : 0;
+                case 4: return this.buttons.UP ? 1 : 0;
+                case 5: return this.buttons.DOWN ? 1 : 0;
+                case 6: return this.buttons.LEFT ? 1 : 0;
+                case 7: return this.buttons.RIGHT ? 1 : 0;
+                default: return 0;
+            }
+        }
+
+        setButtonState(button, value) {
+            this.buttons[button] = value;
+        }
+    }
+
     class Bus {
         constructor() {
             // Internal RAM (2KB)
@@ -10,6 +64,7 @@ var NESEmulator = (function (exports) {
             this.cpu = null;
             this.ppu = null;
             this.cartridge = null;
+            this.controller1 = new Controller();
             
             // System state
             this.clockCounter = 0;
@@ -21,6 +76,10 @@ var NESEmulator = (function (exports) {
         
         connectPPU(ppu) {
             this.ppu = ppu;
+        }
+
+        connectController(controller) {
+            this.controller1 = controller;
         }
         
         connectCartridge(cartridge) {
@@ -36,9 +95,9 @@ var NESEmulator = (function (exports) {
             } else if (addr >= 0x2000 && addr <= 0x3FFF) {
                 // PPU Registers and mirrors
                 return this.ppu?.readRegister(addr & 0x0007) || 0x00;
-            } else if (addr >= 0x4016 && addr <= 0x4017) {
-                // Controller registers
-                return 0x00; // TODO: Implement controllers
+            } else if (addr === 0x4016) {
+                // Controller 1
+                return this.controller1.read();
             } else if (addr >= 0x4020 && addr <= 0xFFFF) {
                 // Cartridge space
                 return this.cartridge?.cpuRead(addr) || 0x00;
@@ -57,7 +116,10 @@ var NESEmulator = (function (exports) {
             } else if (addr >= 0x2000 && addr <= 0x3FFF) {
                 // PPU Registers and mirrors
                 this.ppu?.writeRegister(addr & 0x0007, data);
-            } else if (addr >= 0x4014 && addr <= 0x4016) ; else if (addr >= 0x4020 && addr <= 0xFFFF) {
+            } else if (addr === 0x4016) {
+                // Controller 1
+                this.controller1.write(data);
+            } else if (addr >= 0x4020 && addr <= 0xFFFF) {
                 // Cartridge space
                 this.cartridge?.cpuWrite(addr, data);
             }
@@ -215,11 +277,12 @@ var NESEmulator = (function (exports) {
         // BRK - Break
         BRK: function(addrData) {
             this.pc++;
-            this.push(this.pc >> 8 & 0xFF);
+            this.setFlag(FLAGS$1.I, true);
+            this.push((this.pc >> 8) & 0xFF);
             this.push(this.pc & 0xFF);
             this.setFlag(FLAGS$1.B, true);
             this.push(this.status);
-            this.setFlag(FLAGS$1.I, true);
+            this.setFlag(FLAGS$1.B, false);
             this.pc = this.bus.read(0xFFFE) | (this.bus.read(0xFFFF) << 8);
             return 0;
         },
@@ -383,6 +446,7 @@ var NESEmulator = (function (exports) {
         
         // LDX - Load X Register
         LDX: function(addrData) {
+            console.log('LDX opcode called');
             this.x = this.fetchOperand(addrData.addr);
             this.setFlag(FLAGS$1.Z, this.x === 0);
             this.setFlag(FLAGS$1.N, (this.x & 0x80) !== 0);
@@ -438,7 +502,7 @@ var NESEmulator = (function (exports) {
         
         // PHP - Push Processor Status
         PHP: function(addrData) {
-            this.push(this.status | FLAGS$1.B | FLAGS$1.U);
+            this.push(this.status | FLAGS$1.B);
             return 0;
         },
         
@@ -629,7 +693,7 @@ var NESEmulator = (function (exports) {
             this.y = 0x00;      // Y Index
             this.stkp = 0xFD;   // Stack Pointer
             this.pc = 0x0000;   // Program Counter
-            this.status = 0x00; // Status Register
+            this.status = FLAGS.U | FLAGS.I; // Status Register
             this.cycles = 0;    // Remaining cycles for current instruction
             this.lookup = [];
             this.initOpcodeTable();
@@ -640,7 +704,7 @@ var NESEmulator = (function (exports) {
             this.x = 0x00;
             this.y = 0x00;
             this.stkp = 0xFD;
-            this.status = FLAGS.U;
+            this.status = FLAGS.U | FLAGS.I;
             this.cycles = 0;
             
             // Reset vector is at $FFFC-$FFFD
@@ -666,6 +730,15 @@ var NESEmulator = (function (exports) {
                 P: this.status | FLAGS.U, // Always set unused bit for comparison
                 PC: this.pc
             };
+        }
+
+        setState(state) {
+            this.a = state.A;
+            this.x = state.X;
+            this.y = state.Y;
+            this.stkp = state.SP;
+            this.status = state.P;
+            this.pc = state.address;
         }
         
         clock() {
@@ -2305,7 +2378,7 @@ var NESEmulator = (function (exports) {
             this.address = parseInt(addressMatch[1], 16);
 
             // Extract instruction bytes and mnemonic
-            const instrMatch = rest.match(/[0-9A-Fa-f]{4}\s+([0-9A-Fa-f\s]+?)\s+([A-Z]{3})/);
+            const instrMatch = rest.match(/[0-9A-Fa-f]{4}\s+([0-9A-Fa-f\s]+?)\s+(\*?[A-Z]{3})/);
             if (!instrMatch) {
                 throw new Error(`Cannot parse instruction from: ${rest}`);
             }
@@ -2314,7 +2387,7 @@ var NESEmulator = (function (exports) {
             this.mnemonic = instrMatch[2];
 
             // Extract operand (everything between mnemonic and "A:")
-            const operandMatch = rest.match(/[A-Z]{3}\s+(.+?)\s+A:/);
+            const operandMatch = rest.match(/\*?[A-Z]{3}\s+(.+?)\s+A:/);
             this.operand = operandMatch ? operandMatch[1].trim() : '';
 
             // Extract register states

@@ -125,11 +125,12 @@ export const opcodes = {
     // BRK - Break
     BRK: function(addrData) {
         this.pc++;
-        this.push(this.pc >> 8 & 0xFF);
+        this.setFlag(FLAGS.I, true);
+        this.push((this.pc >> 8) & 0xFF);
         this.push(this.pc & 0xFF);
         this.setFlag(FLAGS.B, true);
         this.push(this.status);
-        this.setFlag(FLAGS.I, true);
+        this.setFlag(FLAGS.B, false);
         this.pc = this.bus.read(0xFFFE) | (this.bus.read(0xFFFF) << 8);
         return 0;
     },
@@ -293,6 +294,7 @@ export const opcodes = {
     
     // LDX - Load X Register
     LDX: function(addrData) {
+        console.log('LDX opcode called');
         this.x = this.fetchOperand(addrData.addr);
         this.setFlag(FLAGS.Z, this.x === 0);
         this.setFlag(FLAGS.N, (this.x & 0x80) !== 0);
@@ -348,7 +350,7 @@ export const opcodes = {
     
     // PHP - Push Processor Status
     PHP: function(addrData) {
-        this.push(this.status | FLAGS.B | FLAGS.U);
+        this.push(this.status | FLAGS.B);
         return 0;
     },
     

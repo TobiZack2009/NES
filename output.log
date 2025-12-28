@@ -1,0 +1,12 @@
+🔧 Initializing CPU Test Environment...
+Loaded 8991 CPU states from log
+✅ Loaded 8991 CPU states from nestest.log
+✅ Loaded nestest.nes ROM and set PC to $C000
+
+🔍 Running single test - Line 2: LDX #$00
+   Address: $C5F5
+   Before: A=$00 X=$00 Y=$00 SP=$FD P=$24
+   After:  A=$00 X=$00 Y=$00 SP=$FD P=$24
+   Expected: A=$00 X=$00 Y=$00 SP=$FD P=$26
+   ❌ FAIL
+      flag zero: expected true, got false

@@ -60,8 +60,8 @@ class CPUTestRunner {
             // Get state AFTER stepping  
             const stateAfter = this.nes.cpu.getState();
             
-            // Compare with expected
-            const comparison = this.logParser.compare(this.nes.cpu, i);
+            // Compare with expected from the next line
+            const comparison = this.logParser.compare(this.nes.cpu, i + 1);
             
             const result = {
                 lineNumber: i,
@@ -76,11 +76,11 @@ class CPUTestRunner {
                     P: expectedState.P.toString(16).toUpperCase().padStart(2, '0')
                 },
                 actual: {
-                    A: stateAfter.a,
-                    X: stateAfter.x,
-                    Y: stateAfter.y, 
-                    SP: stateAfter.stkp,
-                    P: stateAfter.status.toString(16).toUpperCase().padStart(2, '0')
+                    A: stateAfter.A,
+                    X: stateAfter.X,
+                    Y: stateAfter.Y, 
+                    SP: stateAfter.SP,
+                    P: stateAfter.P.toString(16).toUpperCase().padStart(2, '0')
                 },
                 differences: comparison.differences
             };
@@ -129,18 +129,18 @@ class CPUTestRunner {
         
         // Show current state
         const stateBefore = this.nes.cpu.getState();
-        console.log(`   Before: A=$${stateBefore.a.toString(16).padStart(2, '0').toUpperCase()} X=$${stateBefore.x.toString(16).padStart(2, '0').toUpperCase()} Y=$${stateBefore.y.toString(16).padStart(2, '0').toUpperCase()} SP=$${stateBefore.stkp.toString(16).padStart(2, '0').toUpperCase()} P=$${stateBefore.status.toString(16).padStart(2, '0').toUpperCase()}`);
+        console.log(`   Before: A=$${stateBefore.A.toString(16).padStart(2, '0').toUpperCase()} X=$${stateBefore.X.toString(16).padStart(2, '0').toUpperCase()} Y=$${stateBefore.Y.toString(16).padStart(2, '0').toUpperCase()} SP=$${stateBefore.SP.toString(16).padStart(2, '0').toUpperCase()} P=$${stateBefore.P.toString(16).padStart(2, '0').toUpperCase()}`);
         
         // Step the CPU
         this.nes.step();
         
         // Show new state
         const stateAfter = this.nes.cpu.getState();
-        console.log(`   After:  A=$${stateAfter.a.toString(16).padStart(2, '0').toUpperCase()} X=$${stateAfter.x.toString(16).padStart(2, '0').toUpperCase()} Y=$${stateAfter.y.toString(16).padStart(2, '0').toUpperCase()} SP=$${stateAfter.stkp.toString(16).padStart(2, '0').toUpperCase()} P=$${stateAfter.status.toString(16).padStart(2, '0').toUpperCase()}`);
+        console.log(`   After:  A=$${stateAfter.A.toString(16).padStart(2, '0').toUpperCase()} X=$${stateAfter.X.toString(16).padStart(2, '0').toUpperCase()} Y=$${stateAfter.Y.toString(16).padStart(2, '0').toUpperCase()} SP=$${stateAfter.SP.toString(16).padStart(2, '0').toUpperCase()} P=$${stateAfter.P.toString(16).padStart(2, '0').toUpperCase()}`);
         console.log(`   Expected: A=$${expectedState.A.toString(16).padStart(2, '0').toUpperCase()} X=$${expectedState.X.toString(16).padStart(2, '0').toUpperCase()} Y=$${expectedState.Y.toString(16).padStart(2, '0').toUpperCase()} SP=$${expectedState.SP.toString(16).padStart(2, '0').toUpperCase()} P=$${expectedState.P.toString(16).padStart(2, '0').toUpperCase()}`);
         
         // Compare
-        const comparison = this.logParser.compare(this.nes.cpu, lineNumber);
+        const comparison = this.logParser.compare(this.nes.cpu, lineNumber + 1);
         if (comparison.matches) {
             console.log('   ✅ PASS');
         } else {

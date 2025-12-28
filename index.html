@@ -92,7 +92,17 @@
         <button id="stepBtn">Step</button>
         <button id="runBtn">Run</button>
         <button id="stopBtn">Stop</button>
-        <button id="testBtn">Test with nestest.nes</button>
+    </div>
+
+    <div class="controller">
+        <button data-key="A">A</button>
+        <button data-key="B">B</button>
+        <button data-key="SELECT">Select</button>
+        <button data-key="START">Start</button>
+        <button data-key="UP">Up</button>
+        <button data-key="DOWN">Down</button>
+        <button data-key="LEFT">Left</button>
+        <button data-key="RIGHT">Right</button>
     </div>
     
     <div class="status" id="status">
@@ -103,10 +113,40 @@
         CPU state will appear here
     </div>
     
-    <div class="test-results" id="testResults" style="display: none;">
-        <div class="test-info">Loading test data...</div>
-    </div>
-    
-    <script type="module" src="dist/nes-emu.js"></script>
+    <script type="module">
+        import { nes, controller } from './src/main.js';
+
+        const keyMap = {
+            'KeyJ': 'A',
+            'KeyK': 'B',
+            'ShiftRight': 'SELECT',
+            'Enter': 'START',
+            'KeyW': 'UP',
+            'KeyS': 'DOWN',
+            'KeyA': 'LEFT',
+            'KeyD': 'RIGHT',
+        };
+
+        document.addEventListener('keydown', (e) => {
+            if (keyMap[e.code]) {
+                controller.setButtonState(keyMap[e.code], true);
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (keyMap[e.code]) {
+                controller.setButtonState(keyMap[e.code], false);
+            }
+        });
+
+        document.querySelectorAll('.controller button').forEach(button => {
+            button.addEventListener('mousedown', () => {
+                controller.setButtonState(button.dataset.key, true);
+            });
+            button.addEventListener('mouseup', () => {
+                controller.setButtonState(button.dataset.key, false);
+            });
+        });
+    </script>
 </body>
 </html>
