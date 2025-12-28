@@ -125,6 +125,9 @@ reset() {
             if (this.scanline >= 261) {
                 this.scanline = -1;
                 this.frame++;
+                
+                // Clear screen buffer at end of frame for clean start
+                this.screen.fill(0);
             }
         }
         

@@ -1337,6 +1337,9 @@ var NESEmulator = (function (exports) {
                 if (this.scanline >= 261) {
                     this.scanline = -1;
                     this.frame++;
+                    
+                    // Clear screen buffer at end of frame for clean start
+                    this.screen.fill(0);
                 }
             }
             
@@ -3354,6 +3357,9 @@ var NESEmulator = (function (exports) {
         const stopBtn = document.getElementById('stopBtn');
         const testBtn = document.getElementById('testBtn');
         
+        // Setup keyboard input
+        setupKeyboardInput();
+        
         let isRunning = false;
         let animationId = null;
         
@@ -3569,6 +3575,11 @@ CTRL: $${ppuStatus.control}  MASK: $${ppuStatus.mask}  STATUS: $${ppuStatus.stat
     function updateScreen() {
         if (!exports.nes.ppu) return;
         
+        // Only update when a complete frame is ready (during vblank)
+        if (exports.nes.ppu.scanline < 241) {
+            return; // Still in visible rendering phase
+        }
+        
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const imageData = ctx.createImageData(256, 240);
@@ -3577,6 +3588,72 @@ CTRL: $${ppuStatus.control}  MASK: $${ppuStatus.mask}  STATUS: $${ppuStatus.stat
         imageData.data.set(screenData);
         
         ctx.putImageData(imageData, 0, 0);
+    }
+
+    function setupKeyboardInput() {
+        document.addEventListener('keydown', (e) => {
+            if (!exports.nes.bus.controller1) return;
+            
+            switch(e.code) {
+                case 'KeyX': case 'ButtonX':
+                    exports.nes.bus.controller1.setButtonState('A', true);
+                    break;
+                case 'KeyZ': case 'ButtonZ':
+                    exports.nes.bus.controller1.setButtonState('B', true);
+                    break;
+                case 'Enter': case 'NumpadEnter':
+                    exports.nes.bus.controller1.setButtonState('START', true);
+                    break;
+                case 'ShiftLeft': case 'ShiftRight':
+                    exports.nes.bus.controller1.setButtonState('SELECT', true);
+                    break;
+                case 'ArrowUp': case 'KeyW':
+                    exports.nes.bus.controller1.setButtonState('UP', true);
+                    break;
+                case 'ArrowDown': case 'KeyS':
+                    exports.nes.bus.controller1.setButtonState('DOWN', true);
+                    break;
+                case 'ArrowLeft': case 'KeyA':
+                    exports.nes.bus.controller1.setButtonState('LEFT', true);
+                    break;
+                case 'ArrowRight': case 'KeyD':
+                    exports.nes.bus.controller1.setButtonState('RIGHT', true);
+                    break;
+            }
+            e.preventDefault();
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            if (!exports.nes.bus.controller1) return;
+            
+            switch(e.code) {
+                case 'KeyX': case 'ButtonX':
+                    exports.nes.bus.controller1.setButtonState('A', false);
+                    break;
+                case 'KeyZ': case 'ButtonZ':
+                    exports.nes.bus.controller1.setButtonState('B', false);
+                    break;
+                case 'Enter': case 'NumpadEnter':
+                    exports.nes.bus.controller1.setButtonState('START', false);
+                    break;
+                case 'ShiftLeft': case 'ShiftRight':
+                    exports.nes.bus.controller1.setButtonState('SELECT', false);
+                    break;
+                case 'ArrowUp': case 'KeyW':
+                    exports.nes.bus.controller1.setButtonState('UP', false);
+                    break;
+                case 'ArrowDown': case 'KeyS':
+                    exports.nes.bus.controller1.setButtonState('DOWN', false);
+                    break;
+                case 'ArrowLeft': case 'KeyA':
+                    exports.nes.bus.controller1.setButtonState('LEFT', false);
+                    break;
+                case 'ArrowRight': case 'KeyD':
+                    exports.nes.bus.controller1.setButtonState('RIGHT', false);
+                    break;
+            }
+            e.preventDefault();
+        });
     }
 
     function updateStatus(message) {
