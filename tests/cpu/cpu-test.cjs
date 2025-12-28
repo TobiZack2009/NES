@@ -1,13 +1,18 @@
+#!/usr/bin/env node
+
 /**
- * CPU Test Runner - NodeJS Environment
- * Runs nestest comparison tests directly in NodeJS for rapid iteration
+ * CPU Test Runner
+ * Automated test suite for NES CPU implementation
  */
 
-const { NES } = require('./src/nes.js');
-const { loadROM } = require('./src/cartridge.js');  
-const { logParser } = require('./src/test/logParser.js');
-const { readFileSync } = require('fs');
+import { NES } from '../../src/nes.js';
+import { loadROM } from '../../src/cartridge.js';
+import { logParser } from '../../src/test/logParser.js';
+import { readFileSync } from 'fs';
 
+/**
+ * Test runner class for CPU instruction testing
+ */
 class CPUTestRunner {
     constructor() {
         this.nes = null;
@@ -15,6 +20,10 @@ class CPUTestRunner {
         this.testResults = [];
     }
 
+    /**
+     * Initialize test environment
+     * @async
+     */
     async initialize() {
         console.log('🔧 Initializing CPU Test Environment...');
         
@@ -37,6 +46,11 @@ class CPUTestRunner {
         console.log('✅ Loaded nestest.nes ROM and set PC to $C000');
     }
 
+    /**
+     * Run specified number of tests
+     * @param {number} maxTests - Maximum number of tests to run
+     * @async
+     */
     async runTests(maxTests = 100) {
         console.log(`\n🧪 Running ${maxTests} CPU tests...`);
         this.testResults = [];
@@ -59,9 +73,6 @@ class CPUTestRunner {
                 this.nes.step();
             } while (this.nes.cpu.cycles > 0);
             
-            // Get state AFTER stepping  
-            const stateAfter = this.nes.cpu.getState();
-            
             // Compare with expected from the next line
             const comparison = this.logParser.compare(this.nes.cpu, i + 1);
             
@@ -78,11 +89,11 @@ class CPUTestRunner {
                     P: expectedState.P.toString(16).toUpperCase().padStart(2, '0')
                 },
                 actual: {
-                    A: stateAfter.A,
-                    X: stateAfter.X,
-                    Y: stateAfter.Y, 
-                    SP: stateAfter.SP,
-                    P: stateAfter.P.toString(16).toUpperCase().padStart(2, '0')
+                    A: this.nes.cpu.a,
+                    X: this.nes.cpu.x,
+                    Y: this.nes.cpu.y, 
+                    SP: this.nes.cpu.stkp,
+                    P: this.nes.cpu.status.toString(16).toUpperCase().padStart(2, '0')
                 },
                 differences: comparison.differences
             };
@@ -119,27 +130,42 @@ class CPUTestRunner {
         return this.testResults;
     }
 
+    /**
+     * Run a single test with detailed output
+     * @param {number} lineNumber - Line number to test
+     * @async
+     */
     async runSingleTest(lineNumber) {
-        const expectedState = this.logParser.getState(lineNumber);
-        if (!expectedState) {
+        const expectedStateBefore = this.logParser.getState(lineNumber);
+        if (!expectedStateBefore) {
             console.error(`❌ No expected state for line ${lineNumber}`);
             return;
         }
         
-        console.log(`\n🔍 Running single test - Line ${lineNumber}: ${expectedState.mnemonic} ${expectedState.operand}`);
-        console.log(`   Address: $${expectedState.address.toString(16).toUpperCase().padStart(4, '0')}`);
+        const expectedStateAfter = this.logParser.getState(lineNumber + 1);
+        if (!expectedStateAfter) {
+            console.error(`❌ No expected state for line ${lineNumber + 1}`);
+            return;
+        }
+
+        console.log(`\n🔍 Running single test - Line ${lineNumber}: ${expectedStateBefore.mnemonic} ${expectedStateBefore.operand}`);
+        console.log(`   Address: $${expectedStateBefore.address.toString(16).toUpperCase().padStart(4, '0')}`);
         
-        // Show current state
+        // Set CPU to expected state
+        this.nes.cpu.setState(expectedStateBefore);
+        
         const stateBefore = this.nes.cpu.getState();
         console.log(`   Before: A=$${stateBefore.A.toString(16).padStart(2, '0').toUpperCase()} X=$${stateBefore.X.toString(16).padStart(2, '0').toUpperCase()} Y=$${stateBefore.Y.toString(16).padStart(2, '0').toUpperCase()} SP=$${stateBefore.SP.toString(16).padStart(2, '0').toUpperCase()} P=$${stateBefore.P.toString(16).padStart(2, '0').toUpperCase()}`);
         
         // Step the CPU
-        this.nes.step();
+        do {
+            this.nes.step();
+        } while (this.nes.cpu.cycles > 0);
         
         // Show new state
         const stateAfter = this.nes.cpu.getState();
         console.log(`   After:  A=$${stateAfter.A.toString(16).padStart(2, '0').toUpperCase()} X=$${stateAfter.X.toString(16).padStart(2, '0').toUpperCase()} Y=$${stateAfter.Y.toString(16).padStart(2, '0').toUpperCase()} SP=$${stateAfter.SP.toString(16).padStart(2, '0').toUpperCase()} P=$${stateAfter.P.toString(16).padStart(2, '0').toUpperCase()}`);
-        console.log(`   Expected: A=$${expectedState.A.toString(16).padStart(2, '0').toUpperCase()} X=$${expectedState.X.toString(16).padStart(2, '0').toUpperCase()} Y=$${expectedState.Y.toString(16).padStart(2, '0').toUpperCase()} SP=$${expectedState.SP.toString(16).padStart(2, '0').toUpperCase()} P=$${expectedState.P.toString(16).padStart(2, '0').toUpperCase()}`);
+        console.log(`   Expected: A=$${expectedStateAfter.A.toString(16).padStart(2, '0').toUpperCase()} X=$${expectedStateAfter.X.toString(16).padStart(2, '0').toUpperCase()} Y=$${expectedStateAfter.Y.toString(16).padStart(2, '0').toUpperCase()} SP=$${expectedStateAfter.SP.toString(16).padStart(2, '0').toUpperCase()} P=$${expectedStateAfter.P.toString(16).padStart(2, '0').toUpperCase()}`);
         
         // Compare
         const comparison = this.logParser.compare(this.nes.cpu, lineNumber + 1);
@@ -159,6 +185,10 @@ class CPUTestRunner {
         return comparison;
     }
 
+    /**
+     * Analyze test failures and provide summary
+     * @param {Array} results - Test results to analyze
+     */
     analyzeFailures(results = this.testResults) {
         const failures = results.filter(r => !r.matches);
         console.log(`\n🔍 Analyzing ${failures.length} failures...`);
@@ -223,6 +253,9 @@ class CPUTestRunner {
         }
     }
 
+    /**
+     * Reset CPU to initial test state
+     */
     reset() {
         if (this.nes) {
             this.nes.reset();
@@ -238,17 +271,17 @@ async function main() {
     await runner.initialize();
     
     const args = process.argv.slice(2);
-    const command = args[0];
+    const command = process.argv[2];
     
     switch (command) {
         case 'run':
-            const maxTests = parseInt(args[1]) || 100;
+            const maxTests = parseInt(args[0]) || 100;
             await runner.runTests(maxTests);
             runner.analyzeFailures();
             break;
             
         case 'single':
-            const lineNumber = parseInt(args[1]) || 1;
+            const lineNumber = parseInt(args[0]) || 1;
             await runner.runSingleTest(lineNumber);
             break;
             
@@ -275,4 +308,4 @@ if (require.main === module) {
     main().catch(console.error);
 }
 
-// CPUTestRunner class defined above
+export { CPUTestRunner };

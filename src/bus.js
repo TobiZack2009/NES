@@ -1,36 +1,70 @@
 import { Controller } from './controller.js';
 
+/**
+ * NES System Bus - connects all components and handles memory mapping
+ * Routes read/write operations to appropriate hardware components
+ */
 export class Bus {
+    /**
+     * Create new system bus
+     */
     constructor() {
-        // Internal RAM (2KB)
+        /** @type {Uint8Array} Internal RAM (2KB) */
         this.ram = new Uint8Array(0x0800);
         
-        // Components
+        /** @type {CPU|null} CPU component */
         this.cpu = null;
+        
+        /** @type {PPU|null} PPU component */
         this.ppu = null;
+        
+        /** @type {Cartridge|null} Cartridge component */
         this.cartridge = null;
+        
+        /** @type {Controller} Controller 1 */
         this.controller1 = new Controller();
         
-        // System state
+        /** @type {number} System clock counter */
         this.clockCounter = 0;
     }
     
+    /**
+     * Connect CPU to the bus
+     * @param {CPU} cpu - CPU instance to connect
+     */
     connectCPU(cpu) {
         this.cpu = cpu;
     }
     
+    /**
+     * Connect PPU to the bus
+     * @param {PPU} ppu - PPU instance to connect
+     */
     connectPPU(ppu) {
         this.ppu = ppu;
     }
 
+    /**
+     * Connect controller to the bus
+     * @param {Controller} controller - Controller instance to connect
+     */
     connectController(controller) {
         this.controller1 = controller;
     }
     
+    /**
+     * Connect cartridge to the bus
+     * @param {Cartridge} cartridge - Cartridge instance to connect
+     */
     connectCartridge(cartridge) {
         this.cartridge = cartridge;
     }
     
+    /**
+     * Read byte from memory address
+     * @param {number} addr - 16-bit memory address
+     * @returns {number} Byte read from memory
+     */
     read(addr) {
         addr &= 0xFFFF;
         
@@ -51,6 +85,11 @@ export class Bus {
         return 0x00;
     }
     
+    /**
+     * Write byte to memory address
+     * @param {number} addr - 16-bit memory address
+     * @param {number} data - 8-bit data to write
+     */
     write(addr, data) {
         addr &= 0xFFFF;
         data &= 0xFF;
@@ -62,7 +101,7 @@ export class Bus {
             // PPU Registers and mirrors
             this.ppu?.writeRegister(addr & 0x0007, data);
         } else if (addr === 0x4016) {
-            // Controller 1
+            // Controller strobe
             this.controller1.write(data);
         } else if (addr >= 0x4020 && addr <= 0xFFFF) {
             // Cartridge space
@@ -70,6 +109,10 @@ export class Bus {
         }
     }
     
+    /**
+     * Execute one system clock cycle.
+     * PPU runs 3 times faster than CPU.
+     */
     clock() {
         // PPU runs 3 times faster than CPU
         this.ppu?.clock();
@@ -86,6 +129,9 @@ export class Bus {
         this.clockCounter++;
     }
     
+    /**
+     * Reset all connected components
+     */
     reset() {
         this.ram.fill(0);
         this.clockCounter = 0;

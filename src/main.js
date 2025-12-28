@@ -139,6 +139,7 @@ function setupUI() {
     setupControls();
     setupDebug();
     setupTestingUI();
+    setupCollapsibleSections();
 }
 
 function setupROMLoader() {
@@ -322,6 +323,8 @@ function setupTestingUI() {
 
 function updateDebug() {
     const debugEl = document.getElementById('debug');
+    if (!debugEl) return; // Debug section may be collapsed
+    
     const state = nes.dumpCPUState();
     const ppuStatus = nes.ppu ? {
         cycle: nes.ppu.cycle,
@@ -344,8 +347,8 @@ CTRL: $${ppuStatus.control}  MASK: $${ppuStatus.mask}  STATUS: $${ppuStatus.stat
 
 function updateDisassembly() {
     const disassemblyEl = document.getElementById('disassembly-output');
-    if (!nes.cartridge) {
-        disassemblyEl.textContent = 'Load a ROM to see disassembly';
+    if (!disassemblyEl || !nes.cartridge) {
+        if (disassemblyEl) disassemblyEl.textContent = 'Load a ROM to see disassembly';
         return;
     }
     
@@ -371,7 +374,7 @@ function updateDisassembly() {
 
 function logInstruction() {
     const logEl = document.getElementById('instruction-log-output');
-    if (!nes.cartridge) return;
+    if (!logEl || !nes.cartridge) return;
     
     const instruction = disassembleInstruction(nes.bus, nes.cpu.pc);
     const state = nes.cpu.getState();
@@ -521,6 +524,24 @@ async function runNestestTest() {
         updateStatus(`Test failed: ${error.message}`);
         document.getElementById('testResults').innerHTML = `<div class="test-mismatch">Test failed: ${error.message}</div>`;
     }
+}
+
+function setupCollapsibleSections() {
+    const collapsibles = document.querySelectorAll('.collapsible');
+    
+    collapsibles.forEach(button => {
+        button.addEventListener('click', function() {
+            this.classList.toggle('collapsed');
+            const content = this.nextElementSibling;
+            content.classList.toggle('collapsed');
+        });
+    });
+    
+    // Set initial states (debug expanded, others collapsed)
+    document.getElementById('disassembly-toggle').classList.add('collapsed');
+    document.getElementById('disassembly-content').classList.add('collapsed');
+    document.getElementById('instruction-log-toggle').classList.add('collapsed');
+    document.getElementById('instruction-log-content').classList.add('collapsed');
 }
 
 // Export for module usage

@@ -1,18 +1,36 @@
 import { opcodes } from './opcodes.js';
 
+/**
+ * Addressing mode configurations for disassembly
+ * @readonly
+ * @type {Object.<string, {length: number, format: string}>}
+ */
 const addressingModes = {
-    IMM: { length: 2, format: '#$${val:02X}' },
+    /** Immediate addressing */
+    IMM: { length: 2, format: '#${val:02X}' },
+    /** Zero page addressing */
     ZPG: { length: 2, format: '$${val:02X}' },
+    /** Zero page indexed with X */
     ZPX: { length: 2, format: '$${val:02X},X' },
+    /** Zero page indexed with Y */
     ZPY: { length: 2, format: '$${val:02X},Y' },
+    /** Absolute addressing */
     ABS: { length: 3, format: '$${val:04X}' },
+    /** Absolute indexed with X */
     ABX: { length: 3, format: '$${val:04X},X' },
+    /** Absolute indexed with Y */
     ABY: { length: 3, format: '$${val:04X},Y' },
+    /** Indirect addressing */
     IND: { length: 3, format: '($${val:04X})' },
+    /** Indexed indirect with X */
     IZX: { length: 2, format: '($${val:02X},X)' },
+    /** Indirect indexed with Y */
     IZY: { length: 2, format: '($${val:02X}),Y' },
+    /** Relative addressing */
     REL: { length: 2, format: '$${val:04X}' },
+    /** Accumulator addressing */
     ACC: { length: 1, format: 'A' },
+    /** Implied addressing */
     IMP: { length: 1, format: '' },
 };
 
@@ -90,7 +108,7 @@ function initInstructionTable() {
     instructions[0x4D] = { name: 'EOR', addrModeName: 'ABS' };
     instructions[0x5D] = { name: 'EOR', addrModeName: 'ABX' };
     instructions[0x59] = { name: 'EOR', addrModeName: 'ABY' };
-    instructions[0x41] = { name: 'EOR', addrModeName: 'IZX' };
+    instructions[0x21] = { name: 'EOR', addrModeName: 'IZX' };
     instructions[0x51] = { name: 'EOR', addrModeName: 'IZY' };
     instructions[0xE6] = { name: 'INC', addrModeName: 'ZPG' };
     instructions[0xF6] = { name: 'INC', addrModeName: 'ZPX' };
@@ -183,6 +201,13 @@ function initInstructionTable() {
 
 initInstructionTable();
 
+/**
+ * Disassemble a range of memory into human-readable assembly
+ * @param {Bus} bus - System bus for memory access
+ * @param {number} startAddr - Starting address to disassemble
+ * @param {number} [count=20] - Number of instructions to disassemble
+ * @returns {string} Formatted disassembly output
+ */
 export function disassemble(bus, startAddr, count = 20) {
     let output = '';
     let pc = startAddr;
@@ -228,6 +253,17 @@ export function disassemble(bus, startAddr, count = 20) {
     return output;
 }
 
+/**
+ * Disassemble a single instruction
+ * @param {Bus} bus - System bus for memory access
+ * @param {number} addr - Address of instruction to disassemble
+ * @returns {Object} Instruction object with bytes, mnemonic, operand, etc.
+ * @returns {number[]} returns.bytes - Raw instruction bytes
+ * @returns {string} returns.mnemonic - Instruction mnemonic
+ * @returns {string} returns.operand - Formatted operand
+ * @returns {number} returns.length - Total instruction length
+ * @returns {number} returns.addr - Instruction address
+ */
 export function disassembleInstruction(bus, addr) {
     const opcode = bus.read(addr);
     const instruction = instructions[opcode];

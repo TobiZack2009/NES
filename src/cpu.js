@@ -1,30 +1,72 @@
 import { opcodes } from './opcodes.js';
 
+/**
+ * NES CPU processor flags bit definitions
+ * @readonly
+ * @enum {number}
+ */
 export const FLAGS = {
-    C: (1 << 0), // Carry
-    Z: (1 << 1), // Zero
-    I: (1 << 2), // Interrupt Disable
-    D: (1 << 3), // Decimal (Unused in NES)
-    B: (1 << 4), // Break
-    U: (1 << 5), // Unused
-    V: (1 << 6), // Overflow
-    N: (1 << 7), // Negative
+    /** Carry flag - bit 0 */
+    C: (1 << 0),
+    /** Zero flag - bit 1 */
+    Z: (1 << 1),
+    /** Interrupt disable flag - bit 2 */
+    I: (1 << 2),
+    /** Decimal mode flag - bit 3 (unused in NES) */
+    D: (1 << 3),
+    /** Break flag - bit 4 */
+    B: (1 << 4),
+    /** Unused flag - bit 5 (always set in hardware) */
+    U: (1 << 5),
+    /** Overflow flag - bit 6 */
+    V: (1 << 6),
+    /** Negative flag - bit 7 */
+    N: (1 << 7),
 };
 
+/**
+ * NES Ricoh 2A03 CPU emulation
+ * Implements the 6502-based processor used in the Nintendo Entertainment System
+ */
 export class CPU {
+    /**
+     * Create a new CPU instance
+     * @param {Bus} bus - System bus for memory access
+     */
     constructor(bus) {
+        /** @type {Bus} System bus for memory I/O */
         this.bus = bus;
-        this.a = 0x00;      // Accumulator
-        this.x = 0x00;      // X Index
-        this.y = 0x00;      // Y Index
-        this.stkp = 0xFD;   // Stack Pointer
-        this.pc = 0x0000;   // Program Counter
-        this.status = FLAGS.U | FLAGS.I; // Status Register
-        this.cycles = 0;    // Remaining cycles for current instruction
+        
+        /** @type {number} Accumulator register (8-bit) */
+        this.a = 0x00;
+        
+        /** @type {number} X index register (8-bit) */
+        this.x = 0x00;
+        
+        /** @type {number} Y index register (8-bit) */
+        this.y = 0x00;
+        
+        /** @type {number} Stack pointer register (8-bit, points to $0100-$01FF) */
+        this.stkp = 0xFD;
+        
+        /** @type {number} Program counter register (16-bit) */
+        this.pc = 0x0000;
+        
+        /** @type {number} Status register with flags */
+        this.status = FLAGS.U | FLAGS.I;
+        
+        /** @type {number} Cycles remaining for current instruction */
+        this.cycles = 0;
+        
+        /** @type {Array} Opcode lookup table */
         this.lookup = [];
+        
         this.initOpcodeTable();
     }
     
+    /**
+     * Reset CPU to initial state
+     */
     reset() {
         this.a = 0x00;
         this.x = 0x00;
@@ -37,16 +79,29 @@ export class CPU {
         this.pc = this.bus.read(0xFFFC) | (this.bus.read(0xFFFD) << 8);
     }
     
+    /**
+     * Set or clear a specific flag in the status register
+     * @param {number} f - Flag bit to modify (from FLAGS enum)
+     * @param {boolean} v - Value to set (true=set, false=clear)
+     */
     setFlag(f, v) {
         if (v) this.status |= f;
         else this.status &= ~f;
     }
     
+    /**
+     * Get the value of a specific flag from the status register
+     * @param {number} f - Flag bit to read (from FLAGS enum)
+     * @returns {number} - 1 if flag is set, 0 if not set
+     */
     getFlag(f) {
         return (this.status & f) > 0 ? 1 : 0;
     }
 
-    // Get current CPU state for comparison
+    /**
+     * Get current CPU state for debugging and testing
+     * @returns {Object} Object containing all CPU registers
+     */
     getState() {
         return {
             A: this.a,
@@ -58,6 +113,10 @@ export class CPU {
         };
     }
 
+    /**
+     * Set CPU state from saved state (used in testing)
+     * @param {Object} state - CPU state object from getState()
+     */
     setState(state) {
         this.a = state.A;
         this.x = state.X;

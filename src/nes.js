@@ -3,29 +3,48 @@ import { CPU } from './cpu.js';
 import { PPU } from './ppu.js';
 import { Cartridge } from './cartridge.js';
 
+/**
+ * Main NES emulator class
+ * Coordinates all hardware components and provides the main emulation interface
+ */
 export class NES {
+    /**
+     * Create new NES emulator instance
+     */
     constructor() {
+        /** @type {Bus} System bus connecting all components */
         this.bus = new Bus();
+        
+        /** @type {CPU} CPU processor */
         this.cpu = new CPU(this.bus);
         
-        // PPU will be created when cartridge is loaded
+        /** @type {PPU|null} Picture Processing Unit (created when cartridge loaded) */
         this.ppu = null;
+        
+        /** @type {Cartridge|null} Currently loaded cartridge */
+        this.cartridge = null;
         
         // Connect components
         this.bus.connectCPU(this.cpu);
-        
-        // Load a default cartridge if available
-        this.cartridge = null;
     }
     
+    /**
+     * Reset the entire NES system
+     */
     reset() {
         this.bus.reset();
     }
     
+    /**
+     * Execute one system clock cycle
+     */
     clock() {
         this.bus.clock();
     }
     
+    /**
+     * Execute one CPU instruction (may span multiple clock cycles)
+     */
     step() {
         this.bus.clock();
     }

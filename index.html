@@ -126,6 +126,53 @@
             max-height: 300px;
             overflow-y: auto;
         }
+        
+        .collapsible {
+            background: #222;
+            color: #fff;
+            cursor: pointer;
+            padding: 10px;
+            width: 100%;
+            border: none;
+            text-align: left;
+            outline: none;
+            font-family: monospace;
+            font-size: 14px;
+            margin-bottom: 0;
+        }
+        
+        .collapsible:hover {
+            background: #333;
+        }
+        
+        .collapsible:after {
+            content: '▼';
+            float: right;
+            margin-left: 5px;
+        }
+        
+        .collapsible.collapsed:after {
+            content: '▶';
+        }
+        
+        .collapsible-content {
+            padding: 0;
+            max-height: 500px;
+            overflow: hidden;
+            transition: max-height 0.2s ease-out;
+            background: #111;
+            border: 1px solid #333;
+            border-top: none;
+        }
+        
+        .collapsible-content.collapsed {
+            max-height: 0;
+            padding: 0;
+        }
+        
+        .collapsible-wrapper {
+            margin-top: 20px;
+        }
     </style>
 </head>
 <body>
@@ -156,18 +203,31 @@
         Load a .nes ROM file to start
     </div>
     
-    <div class="debug" id="debug">
-        CPU state will appear here
+    <div class="collapsible-wrapper">
+        <button class="collapsible" id="debug-toggle">CPU Debug State</button>
+        <div class="collapsible-content" id="debug-content">
+            <div class="debug" id="debug">
+                CPU state will appear here
+            </div>
+        </div>
     </div>
 
-    <div class="disassembly" id="disassembly">
-        <h2>Disassembly</h2>
-        <pre id="disassembly-output"></pre>
+    <div class="collapsible-wrapper">
+        <button class="collapsible" id="disassembly-toggle">Disassembly</button>
+        <div class="collapsible-content" id="disassembly-content">
+            <div class="disassembly" id="disassembly">
+                <pre id="disassembly-output"></pre>
+            </div>
+        </div>
     </div>
 
-    <div class="instruction-log" id="instruction-log">
-        <h2>Instruction Log</h2>
-        <pre id="instruction-log-output"></pre>
+    <div class="collapsible-wrapper">
+        <button class="collapsible" id="instruction-log-toggle">Instruction Log</button>
+        <div class="collapsible-content" id="instruction-log-content">
+            <div class="instruction-log" id="instruction-log">
+                <pre id="instruction-log-output"></pre>
+            </div>
+        </div>
     </div>
     
     <script type="module">

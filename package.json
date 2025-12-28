@@ -8,9 +8,9 @@
     "build": "rollup -c",
     "dev": "rollup -c -w",
     "serve": "python3 -m http.server 8000",
-    "test": "node cpu-test.cjs run 100",
-    "test-full": "node cpu-test.cjs run 1000",
-    "test-debug": "node cpu-test.cjs single 1"
+    "test": "node --experimental-modules tests/cpu/cpu-test.mjs run 100",
+    "test-full": "node --experimental-modules tests/cpu/cpu-test.mjs run 1000",
+    "test-debug": "node --experimental-modules tests/cpu/cpu-test.mjs single 1"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^25.0.0",

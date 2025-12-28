@@ -1,6 +1,6 @@
-import { NES } from './src/nes.js';
-import { loadROM } from './src/cartridge.js';
-import { logParser } from './src/test/logParser.js';
+import { NES } from '../../src/nes.js';
+import { loadROM } from '../../src/cartridge.js';
+import { logParser } from '../../src/test/logParser.js';
 import { readFileSync } from 'fs';
 import { File } from 'buffer';
 
@@ -23,7 +23,7 @@ async function runSingleTest(lineNumber) {
     
     // Show current state
     const nes = new NES();
-    const romData = readFileSync('./tests/nestest.nes');
+    const romData = readFileSync('/Users/tobizacchaeus/Documents/NES/tests/nestest.nes');
     const romFile = new File([romData], 'nestest.nes');
     const cartridge = await loadROM(romFile);
     nes.loadCartridge(cartridge);
@@ -62,7 +62,7 @@ async function main() {
     console.log('🧪 Loading test data...');
     
     // Load nestest.log
-    const logText = readFileSync('./tests/nestest.log', 'utf8');
+    const logText = readFileSync('/Users/tobizacchaeus/Documents/NES/tests/nestest.log', 'utf8');
     await logParser.load(logText);
     console.log(`✅ Loaded ${logParser.states.length} CPU states`);
     

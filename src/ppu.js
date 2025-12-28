@@ -52,6 +52,12 @@ export class PPU {
         this.spriteZeroHit = false;
         this.spriteOverflow = false;
         
+        // Sprite shifters for rendering
+        this.spritePatterns = [];
+        this.spritePositions = [];
+        this.spritePriorities = [];
+        this.spritePalettes = [];
+        
         this.cartridge = null;
     }
     
@@ -59,7 +65,7 @@ export class PPU {
         this.cartridge = cartridge;
     }
     
-    reset() {
+reset() {
         this.control = 0x00;
         this.mask = 0x00;
         this.status = 0x00;
@@ -97,6 +103,15 @@ export class PPU {
         for (let i = 0; i < 32; i++) {
             this.palette[i] = i % 4 === 0 ? 0x0F : (i - 1) % 4 + 1;
         }
+        
+        // Clear screen buffer
+        this.screen.fill(0);
+        
+        // Clear sprite rendering data
+        this.spritePatterns = [];
+        this.spritePositions = [];
+        this.spritePriorities = [];
+        this.spritePalettes = [];
     }
     
     clock() {
@@ -135,6 +150,9 @@ export class PPU {
                 this.status &= ~0x40; // Clear sprite overflow
                 this.status &= ~0x20; // Clear sprite zero hit
                 this.nmi = false;
+                
+                // Clear screen buffer at start of pre-render scanline
+                this.screen.fill(0);
             }
             
             // Perform same operations as visible scanlines
@@ -165,6 +183,12 @@ export class PPU {
                 this.transferX();
                 this.loadSpritesForNextLine();
             }
+            
+            // Load sprite patterns during cycles 1-256 (visible area)
+            if (this.cycle >= 1 && this.cycle <= 256 && this.cycle % 8 === 0) {
+                // Load sprite patterns every 8 cycles
+                this.loadSpritePatterns();
+            }
         }
     }
     
@@ -193,8 +217,11 @@ export class PPU {
     }
     
     spriteEvaluation() {
-        if (this.cycle === 257) {
-            this.evaluateSprites();
+        if (this.cycle >= 257 && this.cycle <= 320) {
+            // Sprite evaluation happens during this range
+            if (this.cycle === 257) {
+                this.evaluateSprites();
+            }
         }
     }
     
@@ -203,29 +230,48 @@ export class PPU {
             const x = this.cycle - 1;
             const y = this.scanline;
             
+            // Initialize with background color if nothing is enabled
+            let pixelColor = { palette: 0, value: 0 };
+            
             // Get background pixel
-            const bgPixel = this.getBackgroundPixel(x);
-            
-            // Get sprite pixel
-            const spritePixel = this.getSpritePixel(x);
-            
-            // Determine final pixel color
-            let pixelColor;
-            
-            if (this.mask & 0x10) { // Sprites enabled
-                if (spritePixel.palette !== 0 && spritePixel.priority !== 0) {
-                    pixelColor = spritePixel;
-                } else if (bgPixel.palette !== 0) {
-                    pixelColor = bgPixel;
-                } else if (spritePixel.palette !== 0) {
-                    pixelColor = spritePixel;
-                } else {
-                    pixelColor = { palette: 0, value: 0 };
+            if (this.mask & 0x08) {
+                const bgPixel = this.getBackgroundPixel(x);
+                
+                // Get sprite pixel
+                let spritePixel = { palette: 0, value: 0, priority: 0 };
+                if (this.mask & 0x10) {
+                    spritePixel = this.getSpritePixel(x);
                 }
-            } else if (this.mask & 0x08) { // Background only
-                pixelColor = bgPixel.palette !== 0 ? bgPixel : { palette: 0, value: 0 };
-            } else {
-                pixelColor = { palette: 0, value: 0 };
+                
+                // Compose final pixel
+                if ((this.mask & 0x10) && (this.mask & 0x08)) { // Both sprites and background enabled
+                    if (spritePixel.palette !== 0 && spritePixel.priority !== 0) {
+                        // Sprite in front
+                        pixelColor = spritePixel;
+                    } else if (bgPixel.palette !== 0) {
+                        // Background visible
+                        pixelColor = bgPixel;
+                    } else if (spritePixel.palette !== 0) {
+                        // Sprite behind background, but background is transparent
+                        pixelColor = spritePixel;
+                    }
+                } else if (this.mask & 0x10) { // Sprites only
+                    pixelColor = spritePixel.palette !== 0 ? spritePixel : { palette: 0, value: 0 };
+                } else if (this.mask & 0x08) { // Background only
+                    pixelColor = bgPixel.palette !== 0 ? bgPixel : { palette: 0, value: 0 };
+                }
+                
+                // Apply left-side clipping if enabled
+                if (x < 8) {
+                    if ((this.mask & 0x02) === 0 && pixelColor.palette >= 4) {
+                        // Sprite clipping enabled and this is a sprite pixel
+                        pixelColor = { palette: 0, value: 0 };
+                    }
+                    if ((this.mask & 0x08) === 0) {
+                        // Background clipping enabled
+                        pixelColor = { palette: 0, value: 0 };
+                    }
+                }
             }
             
             // Write to screen buffer
@@ -246,8 +292,8 @@ export class PPU {
         }
         
         // Extract pattern from shifters
-        const bitMsb = (this.bgShifterPatternHi >> (15 - x % 8)) & 1;
-        const bitLsb = (this.bgShifterPatternLo >> (15 - x % 8)) & 1;
+        const bitMsb = (this.bgShifterPatternHi >> (15 - (x + this.fineX) % 8)) & 1;
+        const bitLsb = (this.bgShifterPatternLo >> (15 - (x + this.fineX) % 8)) & 1;
         const patternValue = (bitMsb << 1) | bitLsb;
         
         if (patternValue === 0) {
@@ -255,8 +301,8 @@ export class PPU {
         }
         
         // Extract palette from attribute shifters
-        const attribMsb = (this.bgShifterAttribHi >> (7 - x % 8)) & 1;
-        const attribLsb = (this.bgShifterAttribLo >> (7 - x % 8)) & 1;
+        const attribMsb = (this.bgShifterAttribHi >> (7 - (x + this.fineX) % 8)) & 1;
+        const attribLsb = (this.bgShifterAttribLo >> (7 - (x + this.fineX) % 8)) & 1;
         const paletteIndex = (attribMsb << 1) | attribLsb;
         
         return { palette: paletteIndex + 1, value: patternValue };
@@ -267,22 +313,28 @@ export class PPU {
             return { palette: 0, value: 0, priority: 0 };
         }
         
-        for (let i = 0; i < this.spriteScanline.length; i++) {
-            const sprite = this.spriteScanline[i];
-            if (x >= sprite.x && x < sprite.x + 8) {
-                const patternValue = this.getSpritePatternBit(sprite, x - sprite.x);
+        // Check sprites in reverse order (for proper priority)
+        for (let i = this.spriteScanline.length - 1; i >= 0; i--) {
+            const spriteX = this.spritePositions[i];
+            if (x >= spriteX && x < spriteX + 8) {
+                const offsetX = x - spriteX;
+                const patternValue = this.spritePatterns[i][offsetX];
                 
                 if (patternValue !== 0) {
-                    // Check for sprite zero hit
-                    if (i === 0 && this.getBackgroundPixel(x).palette !== 0 && this.cycle !== 256) {
+                    // Check for sprite zero hit (only for sprite 0)
+                    if (i === 0 && !this.spriteZeroHit && 
+                        this.cycle >= 1 && this.cycle <= 256 &&
+                        x < 255 && // Not at x=255 (sprite 0 hit doesn't trigger there)
+                        this.getBackgroundPixel(x).palette !== 0 &&
+                        !(x < 8 && (this.mask & 0x04) === 0)) { // Not in clipped left column
                         this.spriteZeroHit = true;
                         this.status |= 0x40;
                     }
                     
                     return {
-                        palette: sprite.palette,
+                        palette: this.spritePalettes[i],
                         value: patternValue,
-                        priority: sprite.priority
+                        priority: this.spritePriorities[i]
                     };
                 }
             }
@@ -292,8 +344,55 @@ export class PPU {
     }
     
     getSpritePatternBit(sprite, offsetX) {
-        // This is a simplified version - needs proper implementation
-        return 0;
+        const spriteHeight = (this.control & 0x20) ? 16 : 8;
+        let tileIndex = sprite.id;
+        let row = this.scanline - sprite.y;
+        
+        // Ensure row is within bounds
+        if (row < 0 || row >= spriteHeight) {
+            return 0;
+        }
+        
+        // Handle vertical flip
+        if (sprite.vFlip) {
+            row = spriteHeight - 1 - row;
+        }
+        
+        // Handle 8x16 sprites
+        let patternTableAddr;
+        if (spriteHeight === 16) {
+            // For 8x16 sprites, bit 0 of tile ID selects pattern table
+            patternTableAddr = (tileIndex & 0x01) * 0x1000;
+            tileIndex = (tileIndex & 0xFE); // Clear bit 0, keep only tile number
+            
+            // Select which 8x8 tile to use from the 16x16 sprite
+            if (row >= 8) {
+                tileIndex += 1; // Use second tile
+                row -= 8;
+            }
+        } else {
+            // 8x8 sprites use pattern table from PPUCTRL bit 3
+            patternTableAddr = ((this.control >> 3) & 0x01) * 0x1000;
+        }
+        
+        // Calculate pattern address
+        const patternAddr = patternTableAddr + tileIndex * 16 + row;
+        
+        // Read the two pattern bytes
+        const patternLow = this.ppuRead(patternAddr);
+        const patternHigh = this.ppuRead(patternAddr + 8);
+        
+        // Calculate bit position (handle horizontal flip)
+        let bitPos = offsetX;
+        if (sprite.hFlip) {
+            bitPos = 7 - offsetX;
+        }
+        
+        // Extract the 2-bit pattern value
+        const bitLow = (patternLow >> (7 - bitPos)) & 1;
+        const bitHigh = (patternHigh >> (7 - bitPos)) & 1;
+        
+        return (bitHigh << 1) | bitLow;
     }
     
     fetchNametableByte() {
@@ -326,10 +425,14 @@ export class PPU {
     storeTileData() {
         this.bgShifterPatternLo = (this.bgShifterPatternLo << 8) | this.bgNextTileLsb;
         this.bgShifterPatternHi = (this.bgShifterPatternHi << 8) | this.bgNextTileMsb;
-        this.bgShifterAttribLo = (this.bgShifterAttribLo << 8) | ((this.bgNextTileAttr & 0x01) ? 0xFF : 0x00);
-        this.bgShifterAttribHi = (this.bgShifterAttribHi << 8) | ((this.bgNextTileAttr & 0x02) ? 0xFF : 0x00);
-        this.bgShifterAttribLo = (this.bgShifterAttribLo << 8) | ((this.bgNextTileAttr & 0x04) ? 0xFF : 0x00);
-        this.bgShifterAttribHi = (this.bgShifterAttribHi << 8) | ((this.bgNextTileAttr & 0x08) ? 0xFF : 0x00);
+        
+        // Get attribute bits for this tile position
+        const attribShift = ((this.vramAddr >> 4) & 0x04) | (this.vramAddr & 0x02);
+        const attribLatchLo = (this.bgNextTileAttr >> attribShift) & 0x01;
+        const attribLatchHi = (this.bgNextTileAttr >> (attribShift + 1)) & 0x01;
+        
+        this.bgShifterAttribLo = (this.bgShifterAttribLo << 8) | (attribLatchLo ? 0xFF : 0x00);
+        this.bgShifterAttribHi = (this.bgShifterAttribHi << 8) | (attribLatchHi ? 0xFF : 0x00);
         
         this.incrementScrollX();
     }
@@ -377,7 +480,7 @@ export class PPU {
     }
     
     evaluateSprites() {
-        // Reset sprite scanline
+        // Reset sprite scanline - evaluate for NEXT scanline
         this.spriteScanline = [];
         let spriteCount = 0;
         
@@ -393,7 +496,7 @@ export class PPU {
                     id: this.oam[i * 4 + 1],
                     attr: this.oam[i * 4 + 2],
                     x: this.oam[i * 4 + 3],
-                    palette: (this.oam[i * 4 + 2] & 0x03) + 4,
+                    palette: (this.oam[i * 4 + 2] & 0x03) + 4, // Sprite palettes are 4-7
                     priority: (this.oam[i * 4 + 2] & 0x20) ? 1 : 0,
                     hFlip: (this.oam[i * 4 + 2] & 0x40) ? 1 : 0,
                     vFlip: (this.oam[i * 4 + 2] & 0x80) ? 1 : 0
@@ -412,8 +515,42 @@ export class PPU {
     }
     
     loadSpritesForNextLine() {
-        // Prepare sprites for next scanline
-        // This would load sprite pattern data into shifters
+        // Clear sprite rendering data
+        this.spritePatterns = [];
+        this.spritePositions = [];
+        this.spritePriorities = [];
+        this.spritePalettes = [];
+        
+        // Load sprite pattern data for current scanline
+        const spriteHeight = (this.control & 0x20) ? 16 : 8;
+        
+        for (let i = 0; i < this.spriteScanline.length; i++) {
+            const sprite = this.spriteScanline[i];
+            
+            // Skip if sprite won't be visible
+            if (sprite.x >= 256) continue;
+            
+            // Get pattern data for entire sprite row
+            const patternData = [];
+            for (let x = 0; x < 8; x++) {
+                patternData.push(this.getSpritePatternBit(sprite, x));
+            }
+            
+            // Apply horizontal flip if needed
+            if (sprite.hFlip) {
+                patternData.reverse();
+            }
+            
+            this.spritePatterns.push(patternData);
+            this.spritePositions.push(sprite.x);
+            this.spritePriorities.push(sprite.priority);
+            this.spritePalettes.push(sprite.palette);
+        }
+    }
+    
+    loadSpritePatterns() {
+        // This function would load sprite patterns into shifters during rendering
+        // For now, we'll calculate patterns on-demand in getSpritePixel
     }
     
     getColorFromPalette(palette, index) {
@@ -527,11 +664,11 @@ export class PPU {
                 return 0; // Write-only
                 
             case 0x07: // PPUDATA
-                const data = this.dataBuffer;
+                let data = this.dataBuffer;
                 this.dataBuffer = this.ppuRead(this.vramAddr);
                 
                 if (this.vramAddr >= 0x3F00) {
-                    // Palette reads are immediate
+                    // Palette reads are immediate - don't use buffered data
                     data = this.dataBuffer;
                 }
                 
@@ -601,6 +738,17 @@ export class PPU {
         }
     }
     
+    // OAM DMA
+    oamDMA(page) {
+        const sourceAddr = page * 0x100;
+        
+        for (let i = 0; i < 256; i++) {
+            this.oam[i] = this.bus.cpuRead(sourceAddr + i);
+        }
+        
+        this.oamAddr = 0; // Reset OAM address after DMA
+    }
+    
     // PPU Memory Access
     ppuRead(addr) {
         addr &= 0x3FFF;
@@ -629,7 +777,7 @@ export class PPU {
                     return this.vram[0x0400 + index];
                 }
             } else if (mirror === 'four-screen') {
-                // Four-screen mirroring requires additional RAM
+                // Four-screen mirroring would need additional VRAM
                 return this.vram[index % 0x0800];
             }
         } else if (addr >= 0x3000 && addr <= 0x3EFF) {

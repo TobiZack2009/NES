@@ -55,37 +55,71 @@ var NESEmulator = (function (exports) {
         }
     }
 
+    /**
+     * NES System Bus - connects all components and handles memory mapping
+     * Routes read/write operations to appropriate hardware components
+     */
     class Bus {
+        /**
+         * Create new system bus
+         */
         constructor() {
-            // Internal RAM (2KB)
+            /** @type {Uint8Array} Internal RAM (2KB) */
             this.ram = new Uint8Array(0x0800);
             
-            // Components
+            /** @type {CPU|null} CPU component */
             this.cpu = null;
+            
+            /** @type {PPU|null} PPU component */
             this.ppu = null;
+            
+            /** @type {Cartridge|null} Cartridge component */
             this.cartridge = null;
+            
+            /** @type {Controller} Controller 1 */
             this.controller1 = new Controller();
             
-            // System state
+            /** @type {number} System clock counter */
             this.clockCounter = 0;
         }
         
+        /**
+         * Connect CPU to the bus
+         * @param {CPU} cpu - CPU instance to connect
+         */
         connectCPU(cpu) {
             this.cpu = cpu;
         }
         
+        /**
+         * Connect PPU to the bus
+         * @param {PPU} ppu - PPU instance to connect
+         */
         connectPPU(ppu) {
             this.ppu = ppu;
         }
 
+        /**
+         * Connect controller to the bus
+         * @param {Controller} controller - Controller instance to connect
+         */
         connectController(controller) {
             this.controller1 = controller;
         }
         
+        /**
+         * Connect cartridge to the bus
+         * @param {Cartridge} cartridge - Cartridge instance to connect
+         */
         connectCartridge(cartridge) {
             this.cartridge = cartridge;
         }
         
+        /**
+         * Read byte from memory address
+         * @param {number} addr - 16-bit memory address
+         * @returns {number} Byte read from memory
+         */
         read(addr) {
             addr &= 0xFFFF;
             
@@ -106,6 +140,11 @@ var NESEmulator = (function (exports) {
             return 0x00;
         }
         
+        /**
+         * Write byte to memory address
+         * @param {number} addr - 16-bit memory address
+         * @param {number} data - 8-bit data to write
+         */
         write(addr, data) {
             addr &= 0xFFFF;
             data &= 0xFF;
@@ -117,7 +156,7 @@ var NESEmulator = (function (exports) {
                 // PPU Registers and mirrors
                 this.ppu?.writeRegister(addr & 0x0007, data);
             } else if (addr === 0x4016) {
-                // Controller 1
+                // Controller strobe
                 this.controller1.write(data);
             } else if (addr >= 0x4020 && addr <= 0xFFFF) {
                 // Cartridge space
@@ -125,6 +164,10 @@ var NESEmulator = (function (exports) {
             }
         }
         
+        /**
+         * Execute one system clock cycle.
+         * PPU runs 3 times faster than CPU.
+         */
         clock() {
             // PPU runs 3 times faster than CPU
             this.ppu?.clock();
@@ -141,6 +184,9 @@ var NESEmulator = (function (exports) {
             this.clockCounter++;
         }
         
+        /**
+         * Reset all connected components
+         */
         reset() {
             this.ram.fill(0);
             this.clockCounter = 0;
@@ -674,31 +720,73 @@ var NESEmulator = (function (exports) {
         }
     };
 
+    /**
+     * NES CPU processor flags bit definitions
+     * @readonly
+     * @enum {number}
+     */
     const FLAGS = {
-        C: (1 << 0), // Carry
-        Z: (1 << 1), // Zero
-        I: (1 << 2), // Interrupt Disable
-        D: (1 << 3), // Decimal (Unused in NES)
-        B: (1 << 4), // Break
-        U: (1 << 5), // Unused
-        V: (1 << 6), // Overflow
-        N: (1 << 7), // Negative
+        /** Carry flag - bit 0 */
+        C: (1 << 0),
+        /** Zero flag - bit 1 */
+        Z: (1 << 1),
+        /** Interrupt disable flag - bit 2 */
+        I: (1 << 2),
+        /** Decimal mode flag - bit 3 (unused in NES) */
+        D: (1 << 3),
+        /** Break flag - bit 4 */
+        B: (1 << 4),
+        /** Unused flag - bit 5 (always set in hardware) */
+        U: (1 << 5),
+        /** Overflow flag - bit 6 */
+        V: (1 << 6),
+        /** Negative flag - bit 7 */
+        N: (1 << 7),
     };
 
+    /**
+     * NES Ricoh 2A03 CPU emulation
+     * Implements the 6502-based processor used in the Nintendo Entertainment System
+     */
     class CPU {
+        /**
+         * Create a new CPU instance
+         * @param {Bus} bus - System bus for memory access
+         */
         constructor(bus) {
+            /** @type {Bus} System bus for memory I/O */
             this.bus = bus;
-            this.a = 0x00;      // Accumulator
-            this.x = 0x00;      // X Index
-            this.y = 0x00;      // Y Index
-            this.stkp = 0xFD;   // Stack Pointer
-            this.pc = 0x0000;   // Program Counter
-            this.status = FLAGS.U | FLAGS.I; // Status Register
-            this.cycles = 0;    // Remaining cycles for current instruction
+            
+            /** @type {number} Accumulator register (8-bit) */
+            this.a = 0x00;
+            
+            /** @type {number} X index register (8-bit) */
+            this.x = 0x00;
+            
+            /** @type {number} Y index register (8-bit) */
+            this.y = 0x00;
+            
+            /** @type {number} Stack pointer register (8-bit, points to $0100-$01FF) */
+            this.stkp = 0xFD;
+            
+            /** @type {number} Program counter register (16-bit) */
+            this.pc = 0x0000;
+            
+            /** @type {number} Status register with flags */
+            this.status = FLAGS.U | FLAGS.I;
+            
+            /** @type {number} Cycles remaining for current instruction */
+            this.cycles = 0;
+            
+            /** @type {Array} Opcode lookup table */
             this.lookup = [];
+            
             this.initOpcodeTable();
         }
         
+        /**
+         * Reset CPU to initial state
+         */
         reset() {
             this.a = 0x00;
             this.x = 0x00;
@@ -711,16 +799,29 @@ var NESEmulator = (function (exports) {
             this.pc = this.bus.read(0xFFFC) | (this.bus.read(0xFFFD) << 8);
         }
         
+        /**
+         * Set or clear a specific flag in the status register
+         * @param {number} f - Flag bit to modify (from FLAGS enum)
+         * @param {boolean} v - Value to set (true=set, false=clear)
+         */
         setFlag(f, v) {
             if (v) this.status |= f;
             else this.status &= ~f;
         }
         
+        /**
+         * Get the value of a specific flag from the status register
+         * @param {number} f - Flag bit to read (from FLAGS enum)
+         * @returns {number} - 1 if flag is set, 0 if not set
+         */
         getFlag(f) {
             return (this.status & f) > 0 ? 1 : 0;
         }
 
-        // Get current CPU state for comparison
+        /**
+         * Get current CPU state for debugging and testing
+         * @returns {Object} Object containing all CPU registers
+         */
         getState() {
             return {
                 A: this.a,
@@ -732,6 +833,10 @@ var NESEmulator = (function (exports) {
             };
         }
 
+        /**
+         * Set CPU state from saved state (used in testing)
+         * @param {Object} state - CPU state object from getState()
+         */
         setState(state) {
             this.a = state.A;
             this.x = state.X;
@@ -1159,6 +1264,12 @@ var NESEmulator = (function (exports) {
             this.spriteZeroHit = false;
             this.spriteOverflow = false;
             
+            // Sprite shifters for rendering
+            this.spritePatterns = [];
+            this.spritePositions = [];
+            this.spritePriorities = [];
+            this.spritePalettes = [];
+            
             this.cartridge = null;
         }
         
@@ -1166,7 +1277,7 @@ var NESEmulator = (function (exports) {
             this.cartridge = cartridge;
         }
         
-        reset() {
+    reset() {
             this.control = 0x00;
             this.mask = 0x00;
             this.status = 0x00;
@@ -1204,6 +1315,15 @@ var NESEmulator = (function (exports) {
             for (let i = 0; i < 32; i++) {
                 this.palette[i] = i % 4 === 0 ? 0x0F : (i - 1) % 4 + 1;
             }
+            
+            // Clear screen buffer
+            this.screen.fill(0);
+            
+            // Clear sprite rendering data
+            this.spritePatterns = [];
+            this.spritePositions = [];
+            this.spritePriorities = [];
+            this.spritePalettes = [];
         }
         
         clock() {
@@ -1240,6 +1360,9 @@ var NESEmulator = (function (exports) {
                     this.status &= ~0x40; // Clear sprite overflow
                     this.status &= ~0x20; // Clear sprite zero hit
                     this.nmi = false;
+                    
+                    // Clear screen buffer at start of pre-render scanline
+                    this.screen.fill(0);
                 }
                 
                 // Perform same operations as visible scanlines
@@ -1270,6 +1393,12 @@ var NESEmulator = (function (exports) {
                     this.transferX();
                     this.loadSpritesForNextLine();
                 }
+                
+                // Load sprite patterns during cycles 1-256 (visible area)
+                if (this.cycle >= 1 && this.cycle <= 256 && this.cycle % 8 === 0) {
+                    // Load sprite patterns every 8 cycles
+                    this.loadSpritePatterns();
+                }
             }
         }
         
@@ -1298,8 +1427,11 @@ var NESEmulator = (function (exports) {
         }
         
         spriteEvaluation() {
-            if (this.cycle === 257) {
-                this.evaluateSprites();
+            if (this.cycle >= 257 && this.cycle <= 320) {
+                // Sprite evaluation happens during this range
+                if (this.cycle === 257) {
+                    this.evaluateSprites();
+                }
             }
         }
         
@@ -1308,29 +1440,48 @@ var NESEmulator = (function (exports) {
                 const x = this.cycle - 1;
                 const y = this.scanline;
                 
+                // Initialize with background color if nothing is enabled
+                let pixelColor = { palette: 0, value: 0 };
+                
                 // Get background pixel
-                const bgPixel = this.getBackgroundPixel(x);
-                
-                // Get sprite pixel
-                const spritePixel = this.getSpritePixel(x);
-                
-                // Determine final pixel color
-                let pixelColor;
-                
-                if (this.mask & 0x10) { // Sprites enabled
-                    if (spritePixel.palette !== 0 && spritePixel.priority !== 0) {
-                        pixelColor = spritePixel;
-                    } else if (bgPixel.palette !== 0) {
-                        pixelColor = bgPixel;
-                    } else if (spritePixel.palette !== 0) {
-                        pixelColor = spritePixel;
-                    } else {
-                        pixelColor = { palette: 0, value: 0 };
+                if (this.mask & 0x08) {
+                    const bgPixel = this.getBackgroundPixel(x);
+                    
+                    // Get sprite pixel
+                    let spritePixel = { palette: 0, value: 0, priority: 0 };
+                    if (this.mask & 0x10) {
+                        spritePixel = this.getSpritePixel(x);
                     }
-                } else if (this.mask & 0x08) { // Background only
-                    pixelColor = bgPixel.palette !== 0 ? bgPixel : { palette: 0, value: 0 };
-                } else {
-                    pixelColor = { palette: 0, value: 0 };
+                    
+                    // Compose final pixel
+                    if ((this.mask & 0x10) && (this.mask & 0x08)) { // Both sprites and background enabled
+                        if (spritePixel.palette !== 0 && spritePixel.priority !== 0) {
+                            // Sprite in front
+                            pixelColor = spritePixel;
+                        } else if (bgPixel.palette !== 0) {
+                            // Background visible
+                            pixelColor = bgPixel;
+                        } else if (spritePixel.palette !== 0) {
+                            // Sprite behind background, but background is transparent
+                            pixelColor = spritePixel;
+                        }
+                    } else if (this.mask & 0x10) { // Sprites only
+                        pixelColor = spritePixel.palette !== 0 ? spritePixel : { palette: 0, value: 0 };
+                    } else if (this.mask & 0x08) { // Background only
+                        pixelColor = bgPixel.palette !== 0 ? bgPixel : { palette: 0, value: 0 };
+                    }
+                    
+                    // Apply left-side clipping if enabled
+                    if (x < 8) {
+                        if ((this.mask & 0x02) === 0 && pixelColor.palette >= 4) {
+                            // Sprite clipping enabled and this is a sprite pixel
+                            pixelColor = { palette: 0, value: 0 };
+                        }
+                        if ((this.mask & 0x08) === 0) {
+                            // Background clipping enabled
+                            pixelColor = { palette: 0, value: 0 };
+                        }
+                    }
                 }
                 
                 // Write to screen buffer
@@ -1351,8 +1502,8 @@ var NESEmulator = (function (exports) {
             }
             
             // Extract pattern from shifters
-            const bitMsb = (this.bgShifterPatternHi >> (15 - x % 8)) & 1;
-            const bitLsb = (this.bgShifterPatternLo >> (15 - x % 8)) & 1;
+            const bitMsb = (this.bgShifterPatternHi >> (15 - (x + this.fineX) % 8)) & 1;
+            const bitLsb = (this.bgShifterPatternLo >> (15 - (x + this.fineX) % 8)) & 1;
             const patternValue = (bitMsb << 1) | bitLsb;
             
             if (patternValue === 0) {
@@ -1360,8 +1511,8 @@ var NESEmulator = (function (exports) {
             }
             
             // Extract palette from attribute shifters
-            const attribMsb = (this.bgShifterAttribHi >> (7 - x % 8)) & 1;
-            const attribLsb = (this.bgShifterAttribLo >> (7 - x % 8)) & 1;
+            const attribMsb = (this.bgShifterAttribHi >> (7 - (x + this.fineX) % 8)) & 1;
+            const attribLsb = (this.bgShifterAttribLo >> (7 - (x + this.fineX) % 8)) & 1;
             const paletteIndex = (attribMsb << 1) | attribLsb;
             
             return { palette: paletteIndex + 1, value: patternValue };
@@ -1372,22 +1523,28 @@ var NESEmulator = (function (exports) {
                 return { palette: 0, value: 0, priority: 0 };
             }
             
-            for (let i = 0; i < this.spriteScanline.length; i++) {
-                const sprite = this.spriteScanline[i];
-                if (x >= sprite.x && x < sprite.x + 8) {
-                    const patternValue = this.getSpritePatternBit(sprite, x - sprite.x);
+            // Check sprites in reverse order (for proper priority)
+            for (let i = this.spriteScanline.length - 1; i >= 0; i--) {
+                const spriteX = this.spritePositions[i];
+                if (x >= spriteX && x < spriteX + 8) {
+                    const offsetX = x - spriteX;
+                    const patternValue = this.spritePatterns[i][offsetX];
                     
                     if (patternValue !== 0) {
-                        // Check for sprite zero hit
-                        if (i === 0 && this.getBackgroundPixel(x).palette !== 0 && this.cycle !== 256) {
+                        // Check for sprite zero hit (only for sprite 0)
+                        if (i === 0 && !this.spriteZeroHit && 
+                            this.cycle >= 1 && this.cycle <= 256 &&
+                            x < 255 && // Not at x=255 (sprite 0 hit doesn't trigger there)
+                            this.getBackgroundPixel(x).palette !== 0 &&
+                            !(x < 8 && (this.mask & 0x04) === 0)) { // Not in clipped left column
                             this.spriteZeroHit = true;
                             this.status |= 0x40;
                         }
                         
                         return {
-                            palette: sprite.palette,
+                            palette: this.spritePalettes[i],
                             value: patternValue,
-                            priority: sprite.priority
+                            priority: this.spritePriorities[i]
                         };
                     }
                 }
@@ -1397,8 +1554,55 @@ var NESEmulator = (function (exports) {
         }
         
         getSpritePatternBit(sprite, offsetX) {
-            // This is a simplified version - needs proper implementation
-            return 0;
+            const spriteHeight = (this.control & 0x20) ? 16 : 8;
+            let tileIndex = sprite.id;
+            let row = this.scanline - sprite.y;
+            
+            // Ensure row is within bounds
+            if (row < 0 || row >= spriteHeight) {
+                return 0;
+            }
+            
+            // Handle vertical flip
+            if (sprite.vFlip) {
+                row = spriteHeight - 1 - row;
+            }
+            
+            // Handle 8x16 sprites
+            let patternTableAddr;
+            if (spriteHeight === 16) {
+                // For 8x16 sprites, bit 0 of tile ID selects pattern table
+                patternTableAddr = (tileIndex & 0x01) * 0x1000;
+                tileIndex = (tileIndex & 0xFE); // Clear bit 0, keep only tile number
+                
+                // Select which 8x8 tile to use from the 16x16 sprite
+                if (row >= 8) {
+                    tileIndex += 1; // Use second tile
+                    row -= 8;
+                }
+            } else {
+                // 8x8 sprites use pattern table from PPUCTRL bit 3
+                patternTableAddr = ((this.control >> 3) & 0x01) * 0x1000;
+            }
+            
+            // Calculate pattern address
+            const patternAddr = patternTableAddr + tileIndex * 16 + row;
+            
+            // Read the two pattern bytes
+            const patternLow = this.ppuRead(patternAddr);
+            const patternHigh = this.ppuRead(patternAddr + 8);
+            
+            // Calculate bit position (handle horizontal flip)
+            let bitPos = offsetX;
+            if (sprite.hFlip) {
+                bitPos = 7 - offsetX;
+            }
+            
+            // Extract the 2-bit pattern value
+            const bitLow = (patternLow >> (7 - bitPos)) & 1;
+            const bitHigh = (patternHigh >> (7 - bitPos)) & 1;
+            
+            return (bitHigh << 1) | bitLow;
         }
         
         fetchNametableByte() {
@@ -1431,10 +1635,14 @@ var NESEmulator = (function (exports) {
         storeTileData() {
             this.bgShifterPatternLo = (this.bgShifterPatternLo << 8) | this.bgNextTileLsb;
             this.bgShifterPatternHi = (this.bgShifterPatternHi << 8) | this.bgNextTileMsb;
-            this.bgShifterAttribLo = (this.bgShifterAttribLo << 8) | ((this.bgNextTileAttr & 0x01) ? 0xFF : 0x00);
-            this.bgShifterAttribHi = (this.bgShifterAttribHi << 8) | ((this.bgNextTileAttr & 0x02) ? 0xFF : 0x00);
-            this.bgShifterAttribLo = (this.bgShifterAttribLo << 8) | ((this.bgNextTileAttr & 0x04) ? 0xFF : 0x00);
-            this.bgShifterAttribHi = (this.bgShifterAttribHi << 8) | ((this.bgNextTileAttr & 0x08) ? 0xFF : 0x00);
+            
+            // Get attribute bits for this tile position
+            const attribShift = ((this.vramAddr >> 4) & 0x04) | (this.vramAddr & 0x02);
+            const attribLatchLo = (this.bgNextTileAttr >> attribShift) & 0x01;
+            const attribLatchHi = (this.bgNextTileAttr >> (attribShift + 1)) & 0x01;
+            
+            this.bgShifterAttribLo = (this.bgShifterAttribLo << 8) | (attribLatchLo ? 0xFF : 0x00);
+            this.bgShifterAttribHi = (this.bgShifterAttribHi << 8) | (attribLatchHi ? 0xFF : 0x00);
             
             this.incrementScrollX();
         }
@@ -1482,7 +1690,7 @@ var NESEmulator = (function (exports) {
         }
         
         evaluateSprites() {
-            // Reset sprite scanline
+            // Reset sprite scanline - evaluate for NEXT scanline
             this.spriteScanline = [];
             let spriteCount = 0;
             
@@ -1498,7 +1706,7 @@ var NESEmulator = (function (exports) {
                         id: this.oam[i * 4 + 1],
                         attr: this.oam[i * 4 + 2],
                         x: this.oam[i * 4 + 3],
-                        palette: (this.oam[i * 4 + 2] & 0x03) + 4,
+                        palette: (this.oam[i * 4 + 2] & 0x03) + 4, // Sprite palettes are 4-7
                         priority: (this.oam[i * 4 + 2] & 0x20) ? 1 : 0,
                         hFlip: (this.oam[i * 4 + 2] & 0x40) ? 1 : 0,
                         vFlip: (this.oam[i * 4 + 2] & 0x80) ? 1 : 0
@@ -1517,8 +1725,42 @@ var NESEmulator = (function (exports) {
         }
         
         loadSpritesForNextLine() {
-            // Prepare sprites for next scanline
-            // This would load sprite pattern data into shifters
+            // Clear sprite rendering data
+            this.spritePatterns = [];
+            this.spritePositions = [];
+            this.spritePriorities = [];
+            this.spritePalettes = [];
+            
+            // Load sprite pattern data for current scanline
+            (this.control & 0x20) ? 16 : 8;
+            
+            for (let i = 0; i < this.spriteScanline.length; i++) {
+                const sprite = this.spriteScanline[i];
+                
+                // Skip if sprite won't be visible
+                if (sprite.x >= 256) continue;
+                
+                // Get pattern data for entire sprite row
+                const patternData = [];
+                for (let x = 0; x < 8; x++) {
+                    patternData.push(this.getSpritePatternBit(sprite, x));
+                }
+                
+                // Apply horizontal flip if needed
+                if (sprite.hFlip) {
+                    patternData.reverse();
+                }
+                
+                this.spritePatterns.push(patternData);
+                this.spritePositions.push(sprite.x);
+                this.spritePriorities.push(sprite.priority);
+                this.spritePalettes.push(sprite.palette);
+            }
+        }
+        
+        loadSpritePatterns() {
+            // This function would load sprite patterns into shifters during rendering
+            // For now, we'll calculate patterns on-demand in getSpritePixel
         }
         
         getColorFromPalette(palette, index) {
@@ -1632,11 +1874,11 @@ var NESEmulator = (function (exports) {
                     return 0; // Write-only
                     
                 case 0x07: // PPUDATA
-                    const data = this.dataBuffer;
+                    let data = this.dataBuffer;
                     this.dataBuffer = this.ppuRead(this.vramAddr);
                     
                     if (this.vramAddr >= 0x3F00) {
-                        // Palette reads are immediate
+                        // Palette reads are immediate - don't use buffered data
                         data = this.dataBuffer;
                     }
                     
@@ -1706,6 +1948,17 @@ var NESEmulator = (function (exports) {
             }
         }
         
+        // OAM DMA
+        oamDMA(page) {
+            const sourceAddr = page * 0x100;
+            
+            for (let i = 0; i < 256; i++) {
+                this.oam[i] = this.bus.cpuRead(sourceAddr + i);
+            }
+            
+            this.oamAddr = 0; // Reset OAM address after DMA
+        }
+        
         // PPU Memory Access
         ppuRead(addr) {
             addr &= 0x3FFF;
@@ -1734,7 +1987,7 @@ var NESEmulator = (function (exports) {
                         return this.vram[0x0400 + index];
                     }
                 } else if (mirror === 'four-screen') {
-                    // Four-screen mirroring requires additional RAM
+                    // Four-screen mirroring would need additional VRAM
                     return this.vram[index % 0x0800];
                 }
             } else if (addr >= 0x3000 && addr <= 0x3EFF) {
@@ -1983,29 +2236,48 @@ var NESEmulator = (function (exports) {
         return Cartridge.fromINES(data);
     }
 
+    /**
+     * Main NES emulator class
+     * Coordinates all hardware components and provides the main emulation interface
+     */
     class NES {
+        /**
+         * Create new NES emulator instance
+         */
         constructor() {
+            /** @type {Bus} System bus connecting all components */
             this.bus = new Bus();
+            
+            /** @type {CPU} CPU processor */
             this.cpu = new CPU(this.bus);
             
-            // PPU will be created when cartridge is loaded
+            /** @type {PPU|null} Picture Processing Unit (created when cartridge loaded) */
             this.ppu = null;
+            
+            /** @type {Cartridge|null} Currently loaded cartridge */
+            this.cartridge = null;
             
             // Connect components
             this.bus.connectCPU(this.cpu);
-            
-            // Load a default cartridge if available
-            this.cartridge = null;
         }
         
+        /**
+         * Reset the entire NES system
+         */
         reset() {
             this.bus.reset();
         }
         
+        /**
+         * Execute one system clock cycle
+         */
         clock() {
             this.bus.clock();
         }
         
+        /**
+         * Execute one CPU instruction (may span multiple clock cycles)
+         */
         step() {
             this.bus.clock();
         }
@@ -2597,19 +2869,37 @@ var NESEmulator = (function (exports) {
     // Singleton instance for the app
     const logParser = new LogParser();
 
+    /**
+     * Addressing mode configurations for disassembly
+     * @readonly
+     * @type {Object.<string, {length: number, format: string}>}
+     */
     const addressingModes = {
-        IMM: { length: 2, format: '#$${val:02X}' },
+        /** Immediate addressing */
+        IMM: { length: 2, format: '#${val:02X}' },
+        /** Zero page addressing */
         ZPG: { length: 2, format: '$${val:02X}' },
+        /** Zero page indexed with X */
         ZPX: { length: 2, format: '$${val:02X},X' },
+        /** Zero page indexed with Y */
         ZPY: { length: 2, format: '$${val:02X},Y' },
+        /** Absolute addressing */
         ABS: { length: 3, format: '$${val:04X}' },
+        /** Absolute indexed with X */
         ABX: { length: 3, format: '$${val:04X},X' },
+        /** Absolute indexed with Y */
         ABY: { length: 3, format: '$${val:04X},Y' },
+        /** Indirect addressing */
         IND: { length: 3, format: '($${val:04X})' },
+        /** Indexed indirect with X */
         IZX: { length: 2, format: '($${val:02X},X)' },
+        /** Indirect indexed with Y */
         IZY: { length: 2, format: '($${val:02X}),Y' },
+        /** Relative addressing */
         REL: { length: 2, format: '$${val:04X}' },
+        /** Accumulator addressing */
         ACC: { length: 1, format: 'A' },
+        /** Implied addressing */
         IMP: { length: 1, format: '' },
     };
 
@@ -2687,7 +2977,7 @@ var NESEmulator = (function (exports) {
         instructions[0x4D] = { name: 'EOR', addrModeName: 'ABS' };
         instructions[0x5D] = { name: 'EOR', addrModeName: 'ABX' };
         instructions[0x59] = { name: 'EOR', addrModeName: 'ABY' };
-        instructions[0x41] = { name: 'EOR', addrModeName: 'IZX' };
+        instructions[0x21] = { name: 'EOR', addrModeName: 'IZX' };
         instructions[0x51] = { name: 'EOR', addrModeName: 'IZY' };
         instructions[0xE6] = { name: 'INC', addrModeName: 'ZPG' };
         instructions[0xF6] = { name: 'INC', addrModeName: 'ZPX' };
@@ -2780,6 +3070,13 @@ var NESEmulator = (function (exports) {
 
     initInstructionTable();
 
+    /**
+     * Disassemble a range of memory into human-readable assembly
+     * @param {Bus} bus - System bus for memory access
+     * @param {number} startAddr - Starting address to disassemble
+     * @param {number} [count=20] - Number of instructions to disassemble
+     * @returns {string} Formatted disassembly output
+     */
     function disassemble(bus, startAddr, count = 20) {
         let output = '';
         let pc = startAddr;
@@ -2825,6 +3122,17 @@ var NESEmulator = (function (exports) {
         return output;
     }
 
+    /**
+     * Disassemble a single instruction
+     * @param {Bus} bus - System bus for memory access
+     * @param {number} addr - Address of instruction to disassemble
+     * @returns {Object} Instruction object with bytes, mnemonic, operand, etc.
+     * @returns {number[]} returns.bytes - Raw instruction bytes
+     * @returns {string} returns.mnemonic - Instruction mnemonic
+     * @returns {string} returns.operand - Formatted operand
+     * @returns {number} returns.length - Total instruction length
+     * @returns {number} returns.addr - Instruction address
+     */
     function disassembleInstruction(bus, addr) {
         const opcode = bus.read(addr);
         const instruction = instructions[opcode];
@@ -3002,6 +3310,7 @@ var NESEmulator = (function (exports) {
         setupControls();
         setupDebug();
         setupTestingUI();
+        setupCollapsibleSections();
     }
 
     function setupROMLoader() {
@@ -3185,6 +3494,8 @@ var NESEmulator = (function (exports) {
 
     function updateDebug() {
         const debugEl = document.getElementById('debug');
+        if (!debugEl) return; // Debug section may be collapsed
+        
         const state = exports.nes.dumpCPUState();
         const ppuStatus = exports.nes.ppu ? {
             cycle: exports.nes.ppu.cycle,
@@ -3207,8 +3518,8 @@ CTRL: $${ppuStatus.control}  MASK: $${ppuStatus.mask}  STATUS: $${ppuStatus.stat
 
     function updateDisassembly() {
         const disassemblyEl = document.getElementById('disassembly-output');
-        if (!exports.nes.cartridge) {
-            disassemblyEl.textContent = 'Load a ROM to see disassembly';
+        if (!disassemblyEl || !exports.nes.cartridge) {
+            if (disassemblyEl) disassemblyEl.textContent = 'Load a ROM to see disassembly';
             return;
         }
         
@@ -3234,7 +3545,7 @@ CTRL: $${ppuStatus.control}  MASK: $${ppuStatus.mask}  STATUS: $${ppuStatus.stat
 
     function logInstruction() {
         const logEl = document.getElementById('instruction-log-output');
-        if (!exports.nes.cartridge) return;
+        if (!logEl || !exports.nes.cartridge) return;
         
         const instruction = disassembleInstruction(exports.nes.bus, exports.nes.cpu.pc);
         const state = exports.nes.cpu.getState();
@@ -3384,6 +3695,24 @@ CTRL: $${ppuStatus.control}  MASK: $${ppuStatus.mask}  STATUS: $${ppuStatus.stat
             updateStatus(`Test failed: ${error.message}`);
             document.getElementById('testResults').innerHTML = `<div class="test-mismatch">Test failed: ${error.message}</div>`;
         }
+    }
+
+    function setupCollapsibleSections() {
+        const collapsibles = document.querySelectorAll('.collapsible');
+        
+        collapsibles.forEach(button => {
+            button.addEventListener('click', function() {
+                this.classList.toggle('collapsed');
+                const content = this.nextElementSibling;
+                content.classList.toggle('collapsed');
+            });
+        });
+        
+        // Set initial states (debug expanded, others collapsed)
+        document.getElementById('disassembly-toggle').classList.add('collapsed');
+        document.getElementById('disassembly-content').classList.add('collapsed');
+        document.getElementById('instruction-log-toggle').classList.add('collapsed');
+        document.getElementById('instruction-log-content').classList.add('collapsed');
     }
 
     // Export for module usage
