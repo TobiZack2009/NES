@@ -361,6 +361,66 @@ npm run test-debug
 
 This architecture provides a complete, production-ready foundation for NES emulation with industry-standard testing capabilities and rapid development workflow. Each component is modular, well-documented, and follows established emulator design patterns.
 
+---
+
+## **Debugging Guide for ROM Issues**
+
+### **1. Test ROM Not Rendering**
+- **Check if ROM writes to PPU registers**: Most test ROMs need to write to $2000 (PPUCTRL) and $2001 (PPUMASK) to enable rendering
+- **Manual PPU register writes**: In browser console, try:
+  ```javascript
+  // Enable background rendering
+  nes.ppu.writeRegister(0x00, 0x08); // PPUCTRL: background enabled
+  nes.ppu.writeRegister(0x01, 0x08); // PPUMASK: background enabled
+  ```
+- **Check ROM's initialization**: Some ROMs require CPU cycles before PPU registers are written
+
+### **2. ROM File Reading Issues**
+If Read tool fails, the file might be:
+- **Corrupted or incomplete download**
+- **Wrong file encoding** (should be binary, not text)
+- **File permissions issue**
+
+### **3. Color Test ROM Shows Black Screen**
+- **PPU register initialization**: Check if ROM sets $2001 to enable rendering
+- **Palette initialization**: Some ROMs write to palette memory first
+- **CHR ROM vs CHR-RAM**: Verify CHR ROM data is accessible
+
+### **4. Using New Debugging Features**
+
+#### **Enhanced Disassembly (now 50 instructions)**
+- **Downloadable**: Full ROM disassembly (1000 instructions around PC)
+- **Highlighted**: Current instruction shown with >>>
+
+#### **Pattern Table Viewer**
+- **View Tiles button**: Opens new window with all CHR tiles
+- **Visual debugging**: See what graphics ROM contains
+
+#### **Memory Viewer**  
+- **Interactive**: Shows first 256 bytes of RAM
+- **Real-time updates**: Click "Step Back" to navigate instruction history
+
+#### **Instruction Log Improvements**
+- **100 instruction history** (increased from 50)
+- **Step Back**: Navigate to previous instructions using stored PC
+- **Clear Log**: Reset instruction history
+
+#### **Keyboard Controls**
+```
+Arrow Keys/WASD: D-pad movement
+X/Z: A/B buttons  
+Enter: Start
+Shift: Select
+```
+
+### **5. Manual ROM Testing**
+To manually test a ROM:
+```javascript
+// In browser console after loading ROM
+nes.ppu.writeRegister(0x00, 0x08); // Enable background
+nes.ppu.writeRegister(0x01, 0x1E); // Enable rendering + color
+```
+
 ## **10. Code Organization & Project Structure**
 
 ### **A. Directory Structure**

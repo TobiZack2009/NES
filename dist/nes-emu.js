@@ -3512,14 +3512,49 @@ var NESEmulator = (function (exports) {
             status: exports.nes.ppu.status.toString(16).padStart(2, '0'),
         } : { cycle: '-', scanline: '-', frame: '-', control: '-', mask: '-', status: '-' };
         
-        debugEl.textContent = `CPU State:
+        debugEl.innerHTML = `CPU State:
 A: $${state.a}  X: $${state.x}  Y: $${state.y}  SP: $${state.stkp}
 PC: $${state.pc}
 Status: ${state.status} (N V - B D I Z C)
 
 PPU State:
 Cycle: ${ppuStatus.cycle}  Scanline: ${ppuStatus.scanline}  Frame: ${ppuStatus.frame}
-CTRL: $${ppuStatus.control}  MASK: $${ppuStatus.mask}  STATUS: $${ppuStatus.status}`;
+CTRL: $${ppuStatus.control}  MASK: $${ppuStatus.mask}  STATUS: $${ppuStatus.status}
+
+<div style="margin-top: 10px;">
+    <button id="downloadDisassembly" style="margin: 5px; padding: 5px 10px; background: #333; color: #fff; border: none; cursor: pointer; font-family: monospace;">Download Disassembly</button>
+    <button id="viewTiles" style="margin: 5px; padding: 5px 10px; background: #333; color: #fff; border: none; cursor: pointer; font-family: monospace;">View Tiles</button>
+    <button id="viewMemory" style="margin: 5px; padding: 5px 10px; background: #333; color: #fff; border: none; cursor: pointer; font-family: monospace;">View Memory</button>
+    <button id="clearLog" style="margin: 5px; padding: 5px 10px; background: #333; color: #fff; border: none; cursor: pointer; font-family: monospace;">Clear Log</button>
+    <button id="stepBack" style="margin: 5px; padding: 5px 10px; background: #333; color: #fff; border: none; cursor: pointer; font-family: monospace;">Step Back</button>
+</div>`;
+        
+        // Add event listeners for new buttons
+        const downloadBtn = document.getElementById('downloadDisassembly');
+        const viewTilesBtn = document.getElementById('viewTiles');
+        const viewMemoryBtn = document.getElementById('viewMemory');
+        const clearLogBtn = document.getElementById('clearLog');
+        const stepBackBtn = document.getElementById('stepBack');
+        
+        if (downloadBtn) {
+            downloadBtn.addEventListener('click', downloadDisassembly);
+        }
+        
+        if (viewTilesBtn) {
+            viewTilesBtn.addEventListener('click', viewTiles);
+        }
+        
+        if (viewMemoryBtn) {
+            viewMemoryBtn.addEventListener('click', viewMemory);
+        }
+        
+        if (clearLogBtn) {
+            clearLogBtn.addEventListener('click', clearInstructionLog);
+        }
+        
+        if (stepBackBtn) {
+            stepBackBtn.addEventListener('click', stepBack);
+        }
     }
 
     function updateDisassembly() {
@@ -3531,8 +3566,8 @@ CTRL: $${ppuStatus.control}  MASK: $${ppuStatus.mask}  STATUS: $${ppuStatus.stat
         
         // Disassemble around current PC
         const currentPC = exports.nes.cpu.pc;
-        const startAddr = Math.max(0x8000, currentPC - 0x20); // Start a bit before current PC
-        const disassembly = disassemble(exports.nes.bus, startAddr, 30);
+        const startAddr = Math.max(0x8000, currentPC - 0x20);
+        const disassembly = disassemble(exports.nes.bus, startAddr, 50);
         
         disassemblyEl.textContent = disassembly;
         
@@ -3561,15 +3596,26 @@ CTRL: $${ppuStatus.control}  MASK: $${ppuStatus.mask}  STATUS: $${ppuStatus.stat
         let currentLog = logEl.textContent;
         if (!currentLog) currentLog = '';
         
-        // Keep only last 50 instructions
+        // Keep only last 100 instructions
         const logLines = currentLog.split('\n').filter(line => line.trim());
         logLines.push(logEntry);
-        if (logLines.length > 50) {
+        if (logLines.length > 100) {
             logLines.shift(); // Remove oldest line
         }
         
         logEl.textContent = logLines.join('\n');
         logEl.scrollTop = logEl.scrollHeight;
+        
+        // Store for debugging
+        window.lastInstruction = logEntry;
+    }
+
+    function clearInstructionLog() {
+        const logEl = document.getElementById('instruction-log-output');
+        if (logEl) {
+            logEl.textContent = '';
+            window.lastInstruction = null;
+        }
     }
 
     function updateScreen() {
@@ -3654,6 +3700,123 @@ CTRL: $${ppuStatus.control}  MASK: $${ppuStatus.mask}  STATUS: $${ppuStatus.stat
             }
             e.preventDefault();
         });
+    }
+
+    function downloadDisassembly() {
+        const currentPC = exports.nes.cpu.pc;
+        const startAddr = Math.max(0x8000, currentPC - 0x100);
+        const disassembly = disassemble(exports.nes.bus, startAddr, 1000);
+        
+        const blob = new Blob([disassembly], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `nes_disassembly_${currentPC.toString(16).toUpperCase()}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    function viewTiles() {
+        if (!exports.nes.ppu || !exports.nes.cartridge) {
+            updateStatus('Load a ROM to view tiles');
+            return;
+        }
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+        
+        // Draw all pattern tiles from CHR ROM
+        const patternTableSize = 0x1000; // 4KB per pattern table
+        const tileSize = 8;
+        const tilesPerRow = 16;
+        const tilesPerCol = 16;
+        
+        for (let table = 0; table < 2; table++) {
+            for (let tileY = 0; tileY < tilesPerCol; tileY++) {
+                for (let tileX = 0; tileX < tilesPerRow; tileX++) {
+                    const tileIndex = tileY * tilesPerRow + tileX;
+                    const tileAddr = table * patternTableSize + tileIndex * 16;
+                    
+                    // Draw 8x8 tile
+                    for (let row = 0; row < tileSize; row++) {
+                        for (let col = 0; col < tileSize; col++) {
+                            const bitPlane1Addr = tileAddr + row;
+                            const bitPlane2Addr = tileAddr + row + 8;
+                            
+                            const bit1 = exports.nes.ppu.ppuRead(bitPlane1Addr);
+                            const bit2 = exports.nes.ppu.ppuRead(bitPlane2Addr);
+                            
+                            const bitMask = 1 << (7 - col);
+                            const bit1Value = (bit1 & bitMask) ? 1 : 0;
+                            const bit2Value = (bit2 & bitMask) ? 2 : 0;
+                            const colorIndex = bit1Value | bit2Value;
+                            
+                            const color = exports.nes.ppu.getNESColor(colorIndex);
+                            
+                            const x = table * 256 + tileX * tileSize + col;
+                            const y = tileY * tileSize + row;
+                            
+                            ctx.fillStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
+                            ctx.fillRect(x, y, 1, 1);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Create new window to display tiles
+        const tileWindow = window.open('', '_blank');
+        tileWindow.document.write(`
+        <html>
+        <head><title>Pattern Tables</title></head>
+        <body style="margin:0; padding:20px; background:#222; color:#fff;">
+            <h2>NES Pattern Tables</h2>
+            <img src="${canvas.toDataURL()}" style="image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: -webkit-crisp-edges;">
+        </body>
+        </html>
+    `);
+    }
+
+    function viewMemory() {
+        if (!exports.nes.cartridge) {
+            updateStatus('Load a ROM to view memory');
+            return;
+        }
+        
+        const memoryWindow = window.open('', '_blank');
+        let memoryHTML = '<html><head><title>Memory Viewer</title><style>body { font-family: monospace; background: #222; color: #fff; padding: 20px; } table { border-collapse: collapse; } td { padding: 2px 4px; border: 1px solid #444; } .addr { font-weight: bold; }</style></head><body>';
+        memoryHTML += '<h2>NES Memory Viewer</h2>';
+        memoryHTML += '<table>';
+        memoryHTML += '<tr><th>Address</th><th>00</th><th>01</th><th>02</th><th>03</th><th>04</th><th>05</th><th>06</th><th>07</th><th>08</th><th>09</th><th>0A</th><th>0B</th><th>0C</th><th>0D</th><th>0E</th><th>0F</th></tr>';
+        
+        // Show main RAM first 256 bytes
+        for (let page = 0; page < 16; page++) {
+            memoryHTML += `<tr><td class="addr">$${page.toString(16)}0</td>`;
+            for (let col = 0; col < 16; col++) {
+                const addr = page * 16 + col;
+                const value = exports.nes.bus.read(addr);
+                memoryHTML += `<td>$${value.toString(16).padStart(2, '0').toUpperCase()}</td>`;
+            }
+            memoryHTML += '</tr>';
+        }
+        
+        memoryHTML += '</table></body></html>';
+        memoryWindow.document.write(memoryHTML);
+    }
+
+    function stepBack() {
+        if (window.lastInstruction && exports.nes.cartridge) {
+            // Go back one instruction
+            const pcMatch = window.lastInstruction.match(/\$([0-9A-F]+)/);
+            if (pcMatch) {
+                const targetPC = parseInt(pcMatch[1], 16);
+                exports.nes.cpu.pc = targetPC;
+                updateDebug();
+                updateDisassembly();
+            }
+        }
     }
 
     function updateStatus(message) {
