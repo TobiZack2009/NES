@@ -15,6 +15,7 @@ This guide provides a cycle-accurate roadmap for building a Nintendo Entertainme
 - Comprehensive testing framework with unit tests, movie recording/playback
 - Automated test suite for CPU and PPU
 - NES test integration (nestest.log parser and state comparison)
+- Controller input for player 1
 
 **🚧 In Progress:**
 - Sprite pattern bit calculation (basic implementation)
@@ -99,6 +100,27 @@ export class CPU {
 }
 ```
 
+### **D. Controller**
+```javascript
+// src/controller.js
+export class Controller {
+    constructor() {
+        this.buttons = {
+            A: false,
+            B: false,
+            SELECT: false,
+            START: false,
+            UP: false,
+            DOWN: false,
+            LEFT: false,
+            RIGHT: false,
+        };
+        this.strobe = 0;
+        this.index = 0;
+    }
+}
+```
+
 ---
 
 ## **2. The System Bus & Memory Map**
@@ -109,10 +131,12 @@ The Bus class routes read/write operations to the appropriate hardware component
 | Range | Size | Description |
 |-------|------|-------------|
 | $0000-$07FF | 2KB | Internal RAM |
-| $0800-$0FFF | 2KB | PPU Registers |
-| $1000-$17FF | 2KB | APU and I/O |
-| $2000-$401F | 8KB | Cartridge PRG ROM |
-| $4020-$FFFF | 12KB | Cartridge PRG ROM + Expansion |
+| $0800-$1FFF | 6KB | RAM Mirrors |
+| $2000-$3FFF | 8KB | PPU Registers |
+| $4000-$4015 | 22B | APU and I/O Registers |
+| $4016-$4017 | 2B  | Controller Registers |
+| $4018-$401F | 8B  | APU and I/O functionality that is normally disabled |
+| $4020-$FFFF | 48KB| Cartridge space: PRG ROM, PRG RAM, and mapper registers |
 
 ### **B. Memory Mirrors**
 - **RAM Mirroring**: Every 2KB region mirrors 3 times

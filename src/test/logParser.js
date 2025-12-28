@@ -172,8 +172,10 @@ export class LogParser {
             });
         }
 
-        // Compare flags
-        if (emulatorCPU.status !== expectedState.P) {
+        // Compare flags (ensure unused bit is set for fair comparison)
+        const cpuStatus = emulatorCPU.status | 0x20; // Set unused bit
+        const expectedStatus = expectedState.P | 0x20; // Ensure expected also has unused bit
+        if (cpuStatus !== expectedStatus) {
             const expectedFlags = {
                 carry: !!(expectedState.P & 0x01),
                 zero: !!(expectedState.P & 0x02),

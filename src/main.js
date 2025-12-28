@@ -2,6 +2,8 @@ import { NES } from './nes.js';
 import { TestFramework, MovieSystem, RegressionTestSuite, CRC32 } from './testing.js';
 import { loadROM } from './cartridge.js';
 import { logParser } from './test/logParser.js';
+import { Controller } from './controller.js';
+import { disassemble, disassembleInstruction } from './disassembler.js';
 
 // Global instances
 let nes;
@@ -159,6 +161,10 @@ function setupROMLoader() {
                 
                 updateStatus(`ROM loaded: ${file.name}`);
                 updateDebug();
+                updateDisassembly();
+                
+                // Clear instruction log
+                document.getElementById('instruction-log-output').textContent = '';
             } catch (error) {
                 console.error('Failed to load ROM:', error);
                 updateStatus(`Error: ${error.message}`);
@@ -182,6 +188,7 @@ function setupControls() {
     resetBtn.addEventListener('click', () => {
         nes.reset();
         updateDebug();
+        updateDisassembly();
         updateScreen();
         updateStatus('Reset');
     });
@@ -189,6 +196,8 @@ function setupControls() {
     stepBtn.addEventListener('click', () => {
         nes.step();
         updateDebug();
+        updateDisassembly();
+        logInstruction();
         updateScreen();
     });
     
@@ -204,6 +213,7 @@ function setupControls() {
                         nes.step();
                     }
                     updateDebug();
+                    updateDisassembly();
                     updateScreen();
                     animationId = requestAnimationFrame(run);
                 }
@@ -228,6 +238,7 @@ function setupControls() {
 
 function setupDebug() {
     updateDebug();
+    updateDisassembly();
     
     // Set up screen update interval
     setInterval(() => {
@@ -329,6 +340,56 @@ Status: ${state.status} (N V - B D I Z C)
 PPU State:
 Cycle: ${ppuStatus.cycle}  Scanline: ${ppuStatus.scanline}  Frame: ${ppuStatus.frame}
 CTRL: $${ppuStatus.control}  MASK: $${ppuStatus.mask}  STATUS: $${ppuStatus.status}`;
+}
+
+function updateDisassembly() {
+    const disassemblyEl = document.getElementById('disassembly-output');
+    if (!nes.cartridge) {
+        disassemblyEl.textContent = 'Load a ROM to see disassembly';
+        return;
+    }
+    
+    // Disassemble around current PC
+    const currentPC = nes.cpu.pc;
+    const startAddr = Math.max(0x8000, currentPC - 0x20); // Start a bit before current PC
+    const disassembly = disassemble(nes.bus, startAddr, 30);
+    
+    disassemblyEl.textContent = disassembly;
+    
+    // Highlight current instruction
+    const lines = disassemblyEl.textContent.split('\n');
+    const highlightedLines = lines.map((line, index) => {
+        const lineAddr = parseInt(line.substring(0, 4), 16);
+        if (lineAddr === currentPC) {
+            return `>>> ${line}`;
+        }
+        return `    ${line}`;
+    });
+    
+    disassemblyEl.textContent = highlightedLines.join('\n');
+}
+
+function logInstruction() {
+    const logEl = document.getElementById('instruction-log-output');
+    if (!nes.cartridge) return;
+    
+    const instruction = disassembleInstruction(nes.bus, nes.cpu.pc);
+    const state = nes.cpu.getState();
+    
+    const logEntry = `$${instruction.addr.toString(16).padStart(4, '0').toUpperCase()}:  ${instruction.bytes.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}  ${instruction.mnemonic} ${instruction.operand}  |  A:$${state.A.toString(16).padStart(2, '0').toUpperCase()} X:$${state.X.toString(16).padStart(2, '0').toUpperCase()} Y:$${state.Y.toString(16).padStart(2, '0').toUpperCase()} P:$${state.P.toString(16).padStart(2, '0').toUpperCase()} SP:$${state.SP.toString(16).padStart(2, '0').toUpperCase()}`;
+    
+    let currentLog = logEl.textContent;
+    if (!currentLog) currentLog = '';
+    
+    // Keep only last 50 instructions
+    const logLines = currentLog.split('\n').filter(line => line.trim());
+    logLines.push(logEntry);
+    if (logLines.length > 50) {
+        logLines.shift(); // Remove oldest line
+    }
+    
+    logEl.textContent = logLines.join('\n');
+    logEl.scrollTop = logEl.scrollHeight;
 }
 
 function updateScreen() {
@@ -463,4 +524,5 @@ async function runNestestTest() {
 }
 
 // Export for module usage
+export const controller=new Controller();
 export { nes, testFramework, movieSystem, regressionSuite };

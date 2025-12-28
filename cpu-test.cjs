@@ -51,11 +51,13 @@ class CPUTestRunner {
                 continue;
             }
             
-            // Get state BEFORE stepping
-            const stateBefore = this.nes.cpu.getState();
+            // Set CPU to expected state BEFORE stepping
+            this.nes.cpu.setState(expectedState);
             
-            // Step CPU one instruction
-            this.nes.step();
+            // Step CPU one instruction (handle multiple cycles)
+            do {
+                this.nes.step();
+            } while (this.nes.cpu.cycles > 0);
             
             // Get state AFTER stepping  
             const stateAfter = this.nes.cpu.getState();

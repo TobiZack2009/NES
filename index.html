@@ -80,6 +80,52 @@
         .test-info {
             color: #ff0;
         }
+        
+        .disassembly {
+            margin-top: 20px;
+            padding: 10px;
+            background: #111;
+            border: 1px solid #333;
+            font-size: 12px;
+            max-width: 512px;
+        }
+        
+        .disassembly h2 {
+            margin-top: 0;
+            color: #fff;
+        }
+        
+        .disassembly pre {
+            color: #0f0;
+            white-space: pre;
+            font-family: monospace;
+            font-size: 12px;
+            line-height: 1.2;
+        }
+        
+        .instruction-log {
+            margin-top: 20px;
+            padding: 10px;
+            background: #111;
+            border: 1px solid #333;
+            font-size: 12px;
+            max-width: 800px;
+        }
+        
+        .instruction-log h2 {
+            margin-top: 0;
+            color: #fff;
+        }
+        
+        .instruction-log pre {
+            color: #ff0;
+            white-space: pre;
+            font-family: monospace;
+            font-size: 11px;
+            line-height: 1.2;
+            max-height: 300px;
+            overflow-y: auto;
+        }
     </style>
 </head>
 <body>
@@ -92,6 +138,7 @@
         <button id="stepBtn">Step</button>
         <button id="runBtn">Run</button>
         <button id="stopBtn">Stop</button>
+        <button id="testBtn">Test</button>
     </div>
 
     <div class="controller">
@@ -111,6 +158,16 @@
     
     <div class="debug" id="debug">
         CPU state will appear here
+    </div>
+
+    <div class="disassembly" id="disassembly">
+        <h2>Disassembly</h2>
+        <pre id="disassembly-output"></pre>
+    </div>
+
+    <div class="instruction-log" id="instruction-log">
+        <h2>Instruction Log</h2>
+        <pre id="instruction-log-output"></pre>
     </div>
     
     <script type="module">

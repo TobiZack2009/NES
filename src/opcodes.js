@@ -277,9 +277,10 @@ export const opcodes = {
     
     // JSR - Jump to Subroutine
     JSR: function(addrData) {
-        this.pc--;
-        this.push(this.pc >> 8 & 0xFF);
-        this.push(this.pc & 0xFF);
+        // Push return address (PC-1, since PC is already at target+3 after addressing mode)
+        const returnAddr = this.pc - 1;
+        this.push(returnAddr >> 8 & 0xFF);
+        this.push(returnAddr & 0xFF);
         this.pc = addrData.addr;
         return 0;
     },
@@ -294,7 +295,6 @@ export const opcodes = {
     
     // LDX - Load X Register
     LDX: function(addrData) {
-        console.log('LDX opcode called');
         this.x = this.fetchOperand(addrData.addr);
         this.setFlag(FLAGS.Z, this.x === 0);
         this.setFlag(FLAGS.N, (this.x & 0x80) !== 0);

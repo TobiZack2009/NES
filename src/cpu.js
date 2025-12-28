@@ -77,6 +77,10 @@ export class CPU {
                 return;
             }
             
+            if (opcode === 0x38) {
+                console.log(`Executing SEC instruction at $${(this.pc - 1).toString(16).padStart(4, '0').toUpperCase()}`);
+            }
+            
             // Store current addressing mode for operand fetching
             this.currentAddrMode = instruction.addrMode;
             

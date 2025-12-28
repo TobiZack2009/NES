@@ -7,7 +7,10 @@
   "scripts": {
     "build": "rollup -c",
     "dev": "rollup -c -w",
-    "serve": "python3 -m http.server 8000"
+    "serve": "python3 -m http.server 8000",
+    "test": "node cpu-test.cjs run 100",
+    "test-full": "node cpu-test.cjs run 1000",
+    "test-debug": "node cpu-test.cjs single 1"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^25.0.0",
