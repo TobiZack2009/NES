@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NES Emulator</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: monospace;
+            background: #000;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        #canvas {
+            border: 2px solid #fff;
+            image-rendering: pixelated;
+            width: 512px;
+            height: 480px;
+        }
+        
+        .debug {
+            margin-top: 20px;
+            padding: 10px;
+            background: #111;
+            border: 1px solid #333;
+            font-size: 12px;
+            white-space: pre;
+            max-width: 512px;
+            overflow: auto;
+        }
+        
+        .controls {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        button {
+            margin: 5px;
+            padding: 10px 20px;
+            background: #333;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            font-family: monospace;
+        }
+        
+        button:hover {
+            background: #555;
+        }
+        
+        .status {
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        
+        .test-results {
+            margin-top: 20px;
+            padding: 10px;
+            background: #111;
+            border: 1px solid #333;
+            font-size: 12px;
+            max-width: 512px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .test-match {
+            color: #0f0;
+        }
+        
+        .test-mismatch {
+            color: #f00;
+        }
+        
+        .test-info {
+            color: #ff0;
+        }
+    </style>
+</head>
+<body>
+    <h1>NES Emulator</h1>
+    
+    <canvas id="canvas" width="256" height="240"></canvas>
+    
+    <div class="controls">
+        <button id="resetBtn">Reset</button>
+        <button id="stepBtn">Step</button>
+        <button id="runBtn">Run</button>
+        <button id="stopBtn">Stop</button>
+        <button id="testBtn">Test with nestest.nes</button>
+    </div>
+    
+    <div class="status" id="status">
+        Load a .nes ROM file to start
+    </div>
+    
+    <div class="debug" id="debug">
+        CPU state will appear here
+    </div>
+    
+    <div class="test-results" id="testResults" style="display: none;">
+        <div class="test-info">Loading test data...</div>
+    </div>
+    
+    <script type="module" src="dist/nes-emu.js"></script>
+</body>
+</html>

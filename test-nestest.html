@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Nestest Parser</title>
+</head>
+<body>
+    <h1>Testing Nestest Parser</h1>
+    <div id="results"></div>
+    
+    <script type="module">
+        import { logParser } from './src/test/logParser.js';
+        
+        fetch('tests/nestest.log')
+            .then(response => response.text())
+            .then(logText => {
+                return logParser.load(logText);
+            })
+            .then(() => {
+                const resultsEl = document.getElementById('results');
+                resultsEl.innerHTML = `
+                    <p>Successfully loaded ${logParser.states.length} CPU states!</p>
+                    <p>First line number: ${logParser.states[0].lineNumber}</p>
+                    <p>First instruction: ${logParser.states[0].mnemonic} ${logParser.states[0].operand}</p>
+                    <p>First address: $${logParser.states[0].address.toString(16).toUpperCase()}</p>
+                    <p>First A register: $${logParser.states[0].A.toString(16).padStart(2, '0').toUpperCase()}</p>
+                    <p>Second line: ${logParser.states[1].lineNumber}: ${logParser.states[1].mnemonic} ${logParser.states[1].operand}</p>
+                `;
+                console.log('States loaded successfully!', logParser.states.slice(0, 5));
+            })
+            .catch(error => {
+                document.getElementById('results').innerHTML = `<p>Error: ${error.message}</p>`;
+                console.error('Error:', error);
+            });
+    </script>
+</body>
+</html>

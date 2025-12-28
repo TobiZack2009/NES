@@ -1,0 +1,17 @@
+{
+  "name": "nes-emulator",
+  "version": "1.0.0",
+  "description": "Web-based NES Emulator",
+  "main": "dist/nes-emu.js",
+  "type": "module",
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c -w",
+    "serve": "python3 -m http.server 8000"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.0",
+    "@rollup/plugin-node-resolve": "^15.0.0",
+    "rollup": "^3.0.0"
+  }
+}
