@@ -3,245 +3,442 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NES Emulator</title>
+    <title>NES Emulator - Debugger UI</title>
     <style>
+        :root {
+            --bg-color: #121212;
+            --bg-light: #1e1e1e;
+            --bg-lighter: #2a2a2a;
+            --border-color: #3a3a3a;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --accent-color: #4080FF;
+            --accent-hover: #5a9bff;
+            --font-main: 'Inter', sans-serif;
+            --font-mono: 'Fira Code', 'Courier New', monospace;
+            --success-color: #28a745;
+            --error-color: #dc3545;
+            --warn-color: #ffc107;
+        }
+
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code&family=Inter:wght@400;500;600&display=swap');
+
         body {
             margin: 0;
-            padding: 20px;
-            font-family: monospace;
-            background: #000;
-            color: #fff;
+            padding: 24px;
+            font-family: var(--font-main);
+            background: var(--bg-color);
+            color: var(--text-primary);
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 48px);
+        }
+
+        main {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            flex-grow: 1;
+            min-height: 0;
+        }
+
+        .panel {
+            background: var(--bg-light);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .panel-header {
+            padding: 12px 16px;
+            font-weight: 600;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-body {
+            padding: 16px;
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+        
+        /* Emulator Panel */
+        .emulator-view {
             display: flex;
             flex-direction: column;
             align-items: center;
+            justify-content: center;
+            gap: 20px;
+            padding: 20px;
         }
-        
+
         #canvas {
-            border: 2px solid #fff;
-            image-rendering: pixelated;
             width: 512px;
             height: 480px;
+            image-rendering: pixelated;
+            border: 1px solid var(--border-color);
+        }
+
+        .controls-group {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            background: var(--bg-lighter);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            cursor: pointer;
+            font-family: var(--font-main);
+            border-radius: 6px;
+            font-size: 14px;
+            transition: background 0.2s, border-color 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            background: var(--accent-color);
+            border-color: var(--accent-hover);
         }
         
-        .debug {
-            margin-top: 20px;
-            padding: 10px;
-            background: #111;
-            border: 1px solid #333;
-            font-size: 12px;
-            white-space: pre;
-            max-width: 512px;
-            overflow: auto;
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
         
-        .controls {
-            margin-top: 20px;
+        #rom-input-label {
+             background: var(--accent-color);
+             color: white;
+        }
+        #rom-input-label:hover {
+            background: var(--accent-hover);
+        }
+        #rom-input {
+            display: none;
+        }
+
+        #status {
+            font-size: 14px;
+            color: var(--text-secondary);
             text-align: center;
         }
         
-        button {
-            margin: 5px;
-            padding: 10px 20px;
-            background: #333;
-            color: #fff;
-            border: none;
+        /* Debugger Panel */
+        .debugger-panel {
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+            padding: 0 16px;
+        }
+
+        .tab-button {
+            padding: 10px 16px;
             cursor: pointer;
-            font-family: monospace;
+            border: none;
+            background: none;
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-family: var(--font-main);
+            border-bottom: 2px solid transparent;
+        }
+
+        .tab-button.active {
+            color: var(--accent-color);
+            border-bottom-color: var(--accent-color);
+            font-weight: 600;
+        }
+
+        .tab-content {
+            display: none;
+            height: 100%;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        pre {
+            font-family: var(--font-mono);
+            font-size: 13px;
+            white-space: pre-wrap;
+            margin: 0;
+            color: var(--text-primary);
+            line-height: 1.6;
         }
         
-        button:hover {
-            background: #555;
+        .highlight {
+            color: var(--accent-color);
+            font-weight: bold;
         }
-        
-        .status {
-            margin-top: 10px;
+
+        /* CPU State Table */
+        .cpu-state-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+        }
+        .register-group, .flags-group {
+            background: var(--bg-color);
+            border-radius: 6px;
+            padding: 12px;
+        }
+        .group-title {
+            font-weight: 500;
+            margin-bottom: 12px;
+            color: var(--text-secondary);
             font-size: 14px;
         }
-        
-        .test-results {
-            margin-top: 20px;
-            padding: 10px;
-            background: #111;
-            border: 1px solid #333;
-            font-size: 12px;
-            max-width: 512px;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-        
-        .test-match {
-            color: #0f0;
-        }
-        
-        .test-mismatch {
-            color: #f00;
-        }
-        
-        .test-info {
-            color: #ff0;
-        }
-        
-        .disassembly {
-            margin-top: 20px;
-            padding: 10px;
-            background: #111;
-            border: 1px solid #333;
-            font-size: 12px;
-            max-width: 512px;
-        }
-        
-        .disassembly h2 {
-            margin-top: 0;
-            color: #fff;
-        }
-        
-        .disassembly pre {
-            color: #0f0;
-            white-space: pre;
-            font-family: monospace;
-            font-size: 12px;
-            line-height: 1.2;
-        }
-        
-        .instruction-log {
-            margin-top: 20px;
-            padding: 10px;
-            background: #111;
-            border: 1px solid #333;
-            font-size: 12px;
-            max-width: 800px;
-        }
-        
-        .instruction-log h2 {
-            margin-top: 0;
-            color: #fff;
-        }
-        
-        .instruction-log pre {
-            color: #ff0;
-            white-space: pre;
-            font-family: monospace;
-            font-size: 11px;
-            line-height: 1.2;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-        
-        .collapsible {
-            background: #222;
-            color: #fff;
-            cursor: pointer;
-            padding: 10px;
+        .state-table {
             width: 100%;
-            border: none;
-            text-align: left;
-            outline: none;
-            font-family: monospace;
+        }
+        .state-table td {
+            padding: 4px 8px;
+            font-family: var(--font-mono);
             font-size: 14px;
-            margin-bottom: 0;
+        }
+        .state-table .label {
+            color: var(--text-secondary);
         }
         
-        .collapsible:hover {
-            background: #333;
+        .flag-active {
+            color: var(--success-color);
+            font-weight: bold;
+        }
+        .flag-inactive {
+            color: #555;
+        }
+
+        #disassembly-output .current-instruction {
+            background-color: rgba(64, 128, 255, 0.2);
+            font-weight: bold;
         }
         
-        .collapsible:after {
-            content: '▼';
-            float: right;
-            margin-left: 5px;
-        }
-        
-        .collapsible.collapsed:after {
-            content: '▶';
-        }
-        
-        .collapsible-content {
-            padding: 0;
-            max-height: 500px;
-            overflow: hidden;
-            transition: max-height 0.2s ease-out;
-            background: #111;
-            border: 1px solid #333;
-            border-top: none;
-        }
-        
-        .collapsible-content.collapsed {
-            max-height: 0;
-            padding: 0;
-        }
-        
-        .collapsible-wrapper {
-            margin-top: 20px;
-        }
     </style>
 </head>
 <body>
-    <h1>NES Emulator</h1>
-    
-    <canvas id="canvas" width="256" height="240"></canvas>
-    
-    <div class="controls">
-        <button id="resetBtn">Reset</button>
-        <button id="stepBtn">Step</button>
-        <button id="runBtn">Run</button>
-        <button id="stopBtn">Stop</button>
-        <button id="testBtn">Test</button>
-    </div>
-
-    <div class="controller">
-        <button data-key="A">A</button>
-        <button data-key="B">B</button>
-        <button data-key="SELECT">Select</button>
-        <button data-key="START">Start</button>
-        <button data-key="UP">Up</button>
-        <button data-key="DOWN">Down</button>
-        <button data-key="LEFT">Left</button>
-        <button data-key="RIGHT">Right</button>
-    </div>
-    
-    <div class="status" id="status">
-        Load a .nes ROM file to start
-    </div>
-    
-    <div class="collapsible-wrapper">
-        <button class="collapsible" id="debug-toggle">CPU Debug State</button>
-        <div class="collapsible-content" id="debug-content">
-            <div class="debug" id="debug">
-                CPU state will appear here
+    <main>
+        <div class="panel">
+             <div class="emulator-view">
+                <canvas id="canvas" width="256" height="240"></canvas>
+                <div id="status">Select a ROM to start...</div>
+                <div class="controls-group">
+                    <input type="file" id="rom-input" accept=".nes">
+                    <label for="rom-input" class="btn" id="rom-input-label">Load ROM</label>
+                    <button class="btn" id="runBtn" disabled>Run</button>
+                    <button class="btn" id="stopBtn" disabled>Stop</button>
+                    <button class="btn" id="stepBtn" disabled>Step</button>
+                    <button class="btn" id="resetBtn" disabled>Reset</button>
+                </div>
             </div>
         </div>
-    </div>
 
-    <div class="collapsible-wrapper">
-        <button class="collapsible" id="disassembly-toggle">Disassembly</button>
-        <div class="collapsible-content" id="disassembly-content">
-            <div class="disassembly" id="disassembly">
-                <pre id="disassembly-output"></pre>
+        <div class="panel debugger-panel">
+            <div class="tabs">
+                <button class="tab-button active" data-tab="cpu-state">CPU State</button>
+                <button class="tab-button" data-tab="disassembly">Disassembly</button>
+                <button class="tab-button" data-tab="instruction-log">Instruction Log</button>
+            </div>
+            
+            <div id="cpu-state" class="tab-content active panel-body">
+                <div class="cpu-state-grid">
+                    <div class="register-group">
+                        <div class="group-title">Registers</div>
+                        <table class="state-table" id="registers-table">
+                            <!-- Registers will be populated by JS -->
+                        </table>
+                    </div>
+                     <div class="flags-group">
+                        <div class="group-title">Processor Flags</div>
+                        <table class="state-table" id="flags-table">
+                            <!-- Flags will be populated by JS -->
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="disassembly" class="tab-content panel-body">
+                <pre id="disassembly-output">Load a ROM to see disassembly.</pre>
+            </div>
+
+            <div id="instruction-log" class="tab-content panel-body">
+                <pre id="instruction-log-output">Execute instructions to see log.</pre>
             </div>
         </div>
-    </div>
-
-    <div class="collapsible-wrapper">
-        <button class="collapsible" id="instruction-log-toggle">Instruction Log</button>
-        <div class="collapsible-content" id="instruction-log-content">
-            <div class="instruction-log" id="instruction-log">
-                <pre id="instruction-log-output"></pre>
-            </div>
-        </div>
-    </div>
+    </main>
     
     <script type="module">
-        import { nes, controller } from './src/main.js';
+        import { nes, controller, FLAGS } from './src/main.js';
 
+        let animationFrameId = null;
+        let isRunning = false;
+        
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.createImageData(256, 240);
+
+        const runBtn = document.getElementById('runBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const stepBtn = document.getElementById('stepBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const romInput = document.getElementById('rom-input');
+        const statusEl = document.getElementById('status');
+        
+        const registersTable = document.getElementById('registers-table');
+        const flagsTable = document.getElementById('flags-table');
+        const disassemblyOutput = document.getElementById('disassembly-output');
+        const instructionLogOutput = document.getElementById('instruction-log-output');
+
+        function updateUIState() {
+            runBtn.disabled = isRunning || !nes.cartridge;
+            stopBtn.disabled = !isRunning;
+            stepBtn.disabled = isRunning || !nes.cartridge;
+            resetBtn.disabled = !nes.cartridge;
+        }
+
+        function renderScreen() {
+            if (!nes.ppu) return; // Prevent error before PPU is initialized
+            const buffer = nes.ppu.getScreenBuffer();
+            for (let i = 0; i < buffer.length; i++) {
+                imageData.data[i] = buffer[i];
+            }
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        function updateDebugInfo() {
+            if (!nes.cpu) return;
+
+            // Update Registers
+            const cpu = nes.cpu;
+            registersTable.innerHTML = `
+                <tr><td class="label">PC:</td><td>0x${cpu.pc.toString(16).toUpperCase().padStart(4, '0')}</td></tr>
+                <tr><td class="label">A:</td><td>0x${cpu.a.toString(16).toUpperCase().padStart(2, '0')}</td></tr>
+                <tr><td class="label">X:</td><td>0x${cpu.x.toString(16).toUpperCase().padStart(2, '0')}</td></tr>
+                <tr><td class="label">Y:</td><td>0x${cpu.y.toString(16).toUpperCase().padStart(2, '0')}</td></tr>
+                <tr><td class="label">SP:</td><td>0x${cpu.stkp.toString(16).toUpperCase().padStart(2, '0')}</td></tr>
+            `;
+
+            // Update Flags
+            const flags = [
+                { key: 'N', val: cpu.getFlag(FLAGS.N) }, { key: 'V', val: cpu.getFlag(FLAGS.V) },
+                { key: 'U', val: cpu.getFlag(FLAGS.U) }, { key: 'B', val: cpu.getFlag(FLAGS.B) },
+                { key: 'D', val: cpu.getFlag(FLAGS.D) }, { key: 'I', val: cpu.getFlag(FLAGS.I) },
+                { key: 'Z', val: cpu.getFlag(FLAGS.Z) }, { key: 'C', val: cpu.getFlag(FLAGS.C) }
+            ];
+            flagsTable.innerHTML = `<tr>${flags.map(f => `<td>${f.key}</td>`).join('')}</tr>
+                <tr>${flags.map(f => `<td class="${f.val ? 'flag-active' : 'flag-inactive'}">${f.val}</td>`).join('')}</tr>
+            `;
+            
+            // Update Disassembly
+            const disassembly = nes.disassemble(cpu.pc - 10, cpu.pc + 10);
+            disassemblyOutput.innerHTML = disassembly.map(d => {
+                const line = `0x${d.addr.toString(16).toUpperCase().padStart(4, '0')}: ${d.instruction}`;
+                return (d.addr === cpu.pc) ? `<span class="current-instruction">${line}</span>` : line;
+            }).join('\n');
+
+            // Update Instruction Log
+            const log = nes.getInstructionLog();
+            instructionLogOutput.textContent = log.join('\n');
+        }
+
+        function run() {
+            if (!isRunning) return;
+            nes.clock();
+            renderScreen();
+            updateDebugInfo();
+            animationFrameId = requestAnimationFrame(run);
+        }
+
+        runBtn.addEventListener('click', () => {
+            if (nes.cartridge) {
+                isRunning = true;
+                statusEl.textContent = "Emulator is running.";
+                run();
+                updateUIState();
+            }
+        });
+
+        stopBtn.addEventListener('click', () => {
+            isRunning = false;
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            statusEl.textContent = "Emulator stopped.";
+            updateUIState();
+            updateDebugInfo(); // Final update
+        });
+
+        stepBtn.addEventListener('click', () => {
+            if (!isRunning && nes.cartridge) {
+                nes.clock();
+                renderScreen();
+                updateDebugInfo();
+            }
+        });
+
+        resetBtn.addEventListener('click', () => {
+            if (nes.cartridge) {
+                nes.reset();
+                renderScreen();
+                updateDebugInfo();
+                statusEl.textContent = "Emulator reset.";
+            }
+        });
+        
+        romInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const arrayBuffer = await file.arrayBuffer();
+                const romData = new Uint8Array(arrayBuffer);
+                if(nes.load(romData)) {
+                    statusEl.textContent = `${file.name} loaded successfully.`;
+                    isRunning = false;
+                    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                    nes.reset();
+                    updateUIState();
+                    renderScreen();
+                    updateDebugInfo();
+                } else {
+                    statusEl.textContent = `Error: Failed to load ${file.name}.`;
+                }
+            }
+        });
+
+        // Tab switching logic
+        const tabs = document.querySelector('.tabs');
+        const tabContents = document.querySelectorAll('.tab-content');
+        tabs.addEventListener('click', (e) => {
+            if (e.target.classList.contains('tab-button')) {
+                const tabId = e.target.dataset.tab;
+
+                tabs.querySelector('.active').classList.remove('active');
+e.target.classList.add('active');
+
+                tabContents.forEach(content => {
+                    content.classList.remove('active');
+                    if (content.id === tabId) {
+                        content.classList.add('active');
+                    }
+                });
+            }
+        });
+
+        // Keyboard controller input
         const keyMap = {
-            'KeyJ': 'A',
-            'KeyK': 'B',
-            'ShiftRight': 'SELECT',
-            'Enter': 'START',
-            'KeyW': 'UP',
-            'KeyS': 'DOWN',
-            'KeyA': 'LEFT',
-            'KeyD': 'RIGHT',
+            'KeyJ': 'A', 'KeyK': 'B', 'ShiftRight': 'SELECT', 'Enter': 'START',
+            'KeyW': 'UP', 'KeyS': 'DOWN', 'KeyA': 'LEFT', 'KeyD': 'RIGHT',
         };
 
         document.addEventListener('keydown', (e) => {
@@ -256,14 +453,11 @@
             }
         });
 
-        document.querySelectorAll('.controller button').forEach(button => {
-            button.addEventListener('mousedown', () => {
-                controller.setButtonState(button.dataset.key, true);
-            });
-            button.addEventListener('mouseup', () => {
-                controller.setButtonState(button.dataset.key, false);
-            });
-        });
+        // Initial state
+        updateUIState();
+        renderScreen();
+        updateDebugInfo();
+
     </script>
 </body>
 </html>

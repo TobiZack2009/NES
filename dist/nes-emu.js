@@ -2128,6 +2128,10 @@ var NESEmulator = (function (exports) {
         getScreen() {
             return this.screen;
         }
+
+        getScreenBuffer() {
+            return this.getScreen();
+        }
         
         // Check if NMI should be triggered
         checkNMI() {
@@ -2296,646 +2300,6 @@ var NESEmulator = (function (exports) {
             }
         }
     }
-
-    // Utility function to load a ROM file
-    async function loadROM(file) {
-        const buffer = await file.arrayBuffer();
-        const data = new Uint8Array(buffer);
-        return Cartridge.fromINES(data);
-    }
-
-    /**
-     * Main NES emulator class
-     * Coordinates all hardware components and provides the main emulation interface
-     */
-    class NES {
-        /**
-         * Create new NES emulator instance
-         */
-        constructor() {
-            /** @type {Bus} System bus connecting all components */
-            this.bus = new Bus();
-            
-            /** @type {CPU} CPU processor */
-            this.cpu = new CPU(this.bus);
-            
-            /** @type {PPU|null} Picture Processing Unit (created when cartridge loaded) */
-            this.ppu = null;
-            
-            /** @type {Cartridge|null} Currently loaded cartridge */
-            this.cartridge = null;
-            
-            // Connect components
-            this.bus.connectCPU(this.cpu);
-        }
-        
-        /**
-         * Reset the entire NES system
-         */
-        reset() {
-            this.bus.reset();
-        }
-        
-        /**
-         * Execute one system clock cycle
-         */
-        clock() {
-            this.bus.clock();
-        }
-        
-        /**
-         * Execute one CPU instruction (may span multiple clock cycles)
-         */
-        step() {
-            this.bus.clock();
-        }
-        
-        async loadCartridge(cartridgeOrFile) {
-            // Handle both cartridge objects and files
-            let cartridge;
-            if (cartridgeOrFile instanceof Uint8Array) {
-                // Assume it's raw ROM data
-                cartridge = Cartridge.fromINES(cartridgeOrFile);
-            } else {
-                cartridge = cartridgeOrFile;
-            }
-            
-            this.cartridge = cartridge;
-            
-            // Create and connect PPU
-            this.ppu = new PPU(this.bus);
-            this.ppu.connectCartridge(cartridge);
-            this.bus.connectPPU(this.ppu);
-            
-            this.bus.connectCartridge(cartridge);
-            this.reset();
-            
-            return cartridge;
-        }
-        
-        // For testing/debugging
-        dumpCPUState() {
-            return {
-                a: this.cpu.a.toString(16).padStart(2, '0'),
-                x: this.cpu.x.toString(16).padStart(2, '0'),
-                y: this.cpu.y.toString(16).padStart(2, '0'),
-                stkp: this.cpu.stkp.toString(16).padStart(2, '0'),
-                pc: this.cpu.pc.toString(16).padStart(4, '0'),
-                status: this.cpu.status.toString(2).padStart(8, '0')
-            };
-        }
-        
-        getScreen() {
-            return this.ppu ? this.ppu.getScreen() : null;
-        }
-    }
-
-    class TestFramework {
-        constructor() {
-            this.tests = [];
-            this.results = [];
-        }
-        
-        addTest(name, testFunction) {
-            this.tests.push({ name, testFunction });
-        }
-        
-        async runTests() {
-            this.results = [];
-            
-            for (const test of this.tests) {
-                try {
-                    console.log(`Running test: ${test.name}`);
-                    const startTime = performance.now();
-                    
-                    await test.testFunction();
-                    
-                    const endTime = performance.now();
-                    const duration = endTime - startTime;
-                    
-                    this.results.push({
-                        name: test.name,
-                        status: 'passed',
-                        duration,
-                        message: 'Test passed'
-                    });
-                    
-                    console.log(`✓ ${test.name} (${duration.toFixed(2)}ms)`);
-                } catch (error) {
-                    console.error(`✗ ${test.name}: ${error.message}`);
-                    this.results.push({
-                        name: test.name,
-                        status: 'failed',
-                        duration: 0,
-                        message: error.message
-                    });
-                }
-            }
-            
-            return this.results;
-        }
-        
-        generateReport() {
-            const passed = this.results.filter(r => r.status === 'passed').length;
-            const failed = this.results.filter(r => r.status === 'failed').length;
-            const total = this.results.length;
-            
-            let report = `Test Results:\n`;
-            report += `Total: ${total}, Passed: ${passed}, Failed: ${failed}\n\n`;
-            
-            for (const result of this.results) {
-                const status = result.status === 'passed' ? '✓' : '✗';
-                report += `${status} ${result.name} (${result.duration.toFixed(2)}ms)\n`;
-                if (result.status === 'failed') {
-                    report += `  Error: ${result.message}\n`;
-                }
-            }
-            
-            return report;
-        }
-    }
-
-    class MovieSystem {
-        constructor() {
-            this.frames = [];
-            this.currentFrame = 0;
-            this.recording = false;
-            this.playing = false;
-        }
-        
-        startRecording() {
-            this.frames = [];
-            this.currentFrame = 0;
-            this.recording = true;
-            console.log('Started recording movie');
-        }
-        
-        stopRecording() {
-            this.recording = false;
-            console.log(`Stopped recording. Captured ${this.frames.length} frames`);
-        }
-        
-        recordFrame(controller1State, controller2State = 0) {
-            if (this.recording) {
-                this.frames.push({
-                    frame: this.frames.length,
-                    controller1: controller1State,
-                    controller2: controller2State
-                });
-            }
-        }
-        
-        startPlayback() {
-            this.currentFrame = 0;
-            this.playing = true;
-            console.log(`Started playback of ${this.frames.length} frames`);
-        }
-        
-        stopPlayback() {
-            this.playing = false;
-            console.log('Stopped playback');
-        }
-        
-        getNextFrame() {
-            if (!this.playing || this.currentFrame >= this.frames.length) {
-                return null;
-            }
-            
-            const frame = this.frames[this.currentFrame];
-            this.currentFrame++;
-            
-            if (this.currentFrame >= this.frames.length) {
-                this.playing = false;
-                console.log('Playback completed');
-            }
-            
-            return frame;
-        }
-        
-        saveMovie() {
-            const movieData = JSON.stringify(this.frames);
-            const blob = new Blob([movieData], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `nes-movie-${Date.now()}.json`;
-            a.click();
-            
-            URL.revokeObjectURL(url);
-        }
-        
-        loadMovie(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        this.frames = JSON.parse(e.target.result);
-                        this.currentFrame = 0;
-                        console.log(`Loaded movie with ${this.frames.length} frames`);
-                        resolve();
-                    } catch (error) {
-                        reject(new Error('Failed to parse movie file'));
-                    }
-                };
-                reader.readAsText(file);
-            });
-        }
-    }
-
-    class CRC32 {
-        static compute(data) {
-            const table = CRC32.generateTable();
-            let crc = 0xFFFFFFFF;
-            
-            for (let i = 0; i < data.length; i++) {
-                crc = table[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8);
-            }
-            
-            return (crc ^ 0xFFFFFFFF) >>> 0;
-        }
-        
-        static generateTable() {
-            const table = new Array(256);
-            
-            for (let i = 0; i < 256; i++) {
-                let c = i;
-                for (let j = 0; j < 8; j++) {
-                    c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-                }
-                table[i] = c;
-            }
-            
-            return table;
-        }
-    }
-
-    class RegressionTestSuite {
-        constructor() {
-            this.goldenHashes = new Map();
-            this.testResults = [];
-        }
-        
-        loadGoldenHashes(manifest) {
-            this.goldenHashes.clear();
-            for (const [romName, hash] of Object.entries(manifest)) {
-                this.goldenHashes.set(romName, hash);
-            }
-        }
-        
-        async runRegressionTest(nes, romPath, targetFrame = 3600) {
-            console.log(`Running regression test for ${romPath}`);
-            
-            try {
-                // Load ROM
-                const response = await fetch(romPath);
-                const buffer = await response.arrayBuffer();
-                const data = new Uint8Array(buffer);
-                const cartridge = await nes.loadCartridge(data);
-                
-                // Fast-forward to target frame
-                const startTime = performance.now();
-                
-                while (nes.ppu.frame < targetFrame) {
-                    // Run multiple cycles per iteration for faster execution
-                    for (let i = 0; i < 1000; i++) {
-                        nes.step();
-                    }
-                }
-                
-                const endTime = performance.now();
-                const duration = endTime - startTime;
-                
-                // Generate hash of frame buffer
-                const screenData = nes.ppu.getScreen();
-                const hash = CRC32.compute(screenData);
-                
-                // Compare with golden hash
-                const expectedHash = this.goldenHashes.get(romPath);
-                const passed = expectedHash === undefined || hash === expectedHash;
-                
-                const result = {
-                    romPath,
-                    frame: nes.ppu.frame,
-                    hash: hash.toString(16).padStart(8, '0'),
-                    expectedHash: expectedHash ? expectedHash.toString(16).padStart(8, '0') : 'unknown',
-                    passed,
-                    duration,
-                    message: passed ? 'Regression test passed' : `Hash mismatch: expected ${expectedHash}, got ${hash}`
-                };
-                
-                this.testResults.push(result);
-                
-                console.log(`${passed ? '✓' : '✗'} ${romPath}: ${result.message} (${duration.toFixed(2)}ms)`);
-                
-                return result;
-            } catch (error) {
-                const result = {
-                    romPath,
-                    frame: 0,
-                    hash: 'error',
-                    expectedHash: 'error',
-                    passed: false,
-                    duration: 0,
-                    message: `Test failed: ${error.message}`
-                };
-                
-                this.testResults.push(result);
-                console.error(`✗ ${romPath}: ${error.message}`);
-                
-                return result;
-            }
-        }
-        
-        generateReport() {
-            const passed = this.testResults.filter(r => r.passed).length;
-            const failed = this.testResults.filter(r => !r.passed).length;
-            const total = this.testResults.length;
-            
-            let report = `Regression Test Results:\n`;
-            report += `Total: ${total}, Passed: ${passed}, Failed: ${failed}\n\n`;
-            
-            for (const result of this.testResults) {
-                const status = result.passed ? '✓' : '✗';
-                report += `${status} ${result.romPath}\n`;
-                report += `  Frame: ${result.frame}, Hash: ${result.hash}`;
-                if (!result.passed) {
-                    report += `, Expected: ${result.expectedHash}\n`;
-                    report += `  ${result.message}`;
-                }
-                report += `\n`;
-            }
-            
-            return report;
-        }
-        
-        updateGoldenHash(romPath, hash) {
-            this.goldenHashes.set(romPath, hash);
-            console.log(`Updated golden hash for ${romPath}: ${hash.toString(16).padStart(8, '0')}`);
-        }
-        
-        saveGoldenManifest() {
-            const manifest = {};
-            for (const [romPath, hash] of this.goldenHashes) {
-                manifest[romPath] = hash;
-            }
-            
-            const manifestData = JSON.stringify(manifest, null, 2);
-            const blob = new Blob([manifestData], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'golden-hashes.json';
-            a.click();
-            
-            URL.revokeObjectURL(url);
-        }
-    }
-
-    /**
-     * NES Test Log Parser
-     * Parses nestest.log format for CPU state comparison
-     */
-
-    class CPUState {
-        constructor(line) {
-            this.parse(line);
-        }
-
-        parse(line) {
-            // Example line (from actual nestest.log):
-            // C000  4C F5 C5  JMP $C5F5                       A:00 X:00 Y:00 P:24 SP:FD PPU:  0, 21 CYC:7
-            
-            // Remove leading/trailing whitespace
-            line = line.trim();
-            
-            // This is the actual format - no line number, just address, instruction, and state
-            this.lineNumber = null; // Will be set by index in array
-            const rest = line;
-
-            // Extract address
-            const addressMatch = rest.match(/^([0-9A-Fa-f]{4})\s+/);
-            if (!addressMatch) {
-                throw new Error(`Cannot parse address from: ${rest}`);
-            }
-            this.address = parseInt(addressMatch[1], 16);
-
-            // Extract instruction bytes and mnemonic
-            const instrMatch = rest.match(/[0-9A-Fa-f]{4}\s+([0-9A-Fa-f\s]+?)\s+(\*?[A-Z]{3})/);
-            if (!instrMatch) {
-                throw new Error(`Cannot parse instruction from: ${rest}`);
-            }
-            
-            this.instructionBytes = instrMatch[1].trim().split(/\s+/).map(b => parseInt(b, 16));
-            this.mnemonic = instrMatch[2];
-
-            // Extract operand (everything between mnemonic and "A:")
-            const operandMatch = rest.match(/\*?[A-Z]{3}\s+(.+?)\s+A:/);
-            this.operand = operandMatch ? operandMatch[1].trim() : '';
-
-            // Extract register states
-            const registerMatch = rest.match(/A:([0-9A-Fa-f]{2})\s+X:([0-9A-Fa-f]{2})\s+Y:([0-9A-Fa-f]{2})\s+P:([0-9A-Fa-f]{2})\s+SP:([0-9A-Fa-f]{2})/);
-            if (!registerMatch) {
-                throw new Error(`Cannot parse registers from: ${rest}`);
-            }
-
-            this.A = parseInt(registerMatch[1], 16);
-            this.X = parseInt(registerMatch[2], 16);
-            this.Y = parseInt(registerMatch[3], 16);
-            this.P = parseInt(registerMatch[4], 16);
-            this.SP = parseInt(registerMatch[5], 16);
-
-            // Extract PPU state
-            const ppuMatch = rest.match(/PPU:\s*(\d+),\s*(\d+)/);
-            if (ppuMatch) {
-                this.ppuScanline = parseInt(ppuMatch[1], 10);
-                this.ppuCycle = parseInt(ppuMatch[2], 10);
-            } else {
-                this.ppuScanline = null;
-                this.ppuCycle = null;
-            }
-
-            // Extract cycle count
-            const cycleMatch = rest.match(/CYC:(\d+)/);
-            this.cycles = cycleMatch ? parseInt(cycleMatch[1], 10) : null;
-        }
-
-        getProcessorFlags() {
-            return {
-                carry: !!(this.P & 0x01),
-                zero: !!(this.P & 0x02),
-                interruptDisable: !!(this.P & 0x04),
-                decimal: !!(this.P & 0x08),
-                breakFlag: !!(this.P & 0x10),
-                unused: !!(this.P & 0x20),
-                overflow: !!(this.P & 0x40),
-                negative: !!(this.P & 0x80)
-            };
-        }
-
-        toString() {
-            const flags = this.getProcessorFlags();
-            const flagStr = `${flags.carry ? 'C' : 'c'}${flags.zero ? 'Z' : 'z'}${flags.interruptDisable ? 'I' : 'i'}${flags.decimal ? 'D' : 'd'}${flags.overflow ? 'V' : 'v'}${flags.negative ? 'N' : 'n'}`;
-            const pad = (str, length, char) => str.padStart ? str.padStart(length, char) : char.repeat(Math.max(0, length - str.length)) + str;
-            const lineNum = this.lineNumber ? `${this.lineNumber}: ` : '';
-            return `${lineNum}${this.mnemonic} ${this.operand} | A:${pad(this.A.toString(16).toUpperCase(), 2, '0')} X:${pad(this.X.toString(16).toUpperCase(), 2, '0')} Y:${pad(this.Y.toString(16).toUpperCase(), 2, '0')} P:${flagStr} SP:${pad(this.SP.toString(16).toUpperCase(), 2, '0')}`;
-        }
-    }
-
-    class LogParser {
-        constructor() {
-            this.states = [];
-            this.loaded = false;
-        }
-
-        async load(logText) {
-            const lines = logText.split('\n').filter(line => line.trim() && line.trim() !== '');
-            this.states = [];
-
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
-                try {
-                    const state = new CPUState(line);
-                    state.lineNumber = i + 1; // Set line number manually
-                    this.states.push(state);
-                } catch (error) {
-                    console.warn(`Failed to parse line ${i + 1}: ${line}`, error);
-                }
-            }
-
-            this.loaded = true;
-            console.log(`Loaded ${this.states.length} CPU states from log`);
-        }
-
-        getState(lineNumber) {
-            if (!this.loaded) {
-                throw new Error('Log not loaded yet');
-            }
-            return this.states.find(state => state.lineNumber === lineNumber);
-        }
-
-        getStateByAddress(address) {
-            if (!this.loaded) {
-                throw new Error('Log not loaded yet');
-            }
-            return this.states.find(state => state.address === address);
-        }
-
-        compare(emulatorCPU, lineNumber) {
-            const expectedState = this.getState(lineNumber);
-            if (!expectedState) {
-                throw new Error(`No expected state found for line ${lineNumber}`);
-            }
-
-            const differences = [];
-
-            // Compare registers
-            if (emulatorCPU.a !== expectedState.A) {
-                differences.push({
-                    type: 'register',
-                    name: 'A',
-                    expected: expectedState.A,
-                    actual: emulatorCPU.a
-                });
-            }
-
-            if (emulatorCPU.x !== expectedState.X) {
-                differences.push({
-                    type: 'register',
-                    name: 'X',
-                    expected: expectedState.X,
-                    actual: emulatorCPU.x
-                });
-            }
-
-            if (emulatorCPU.y !== expectedState.Y) {
-                differences.push({
-                    type: 'register',
-                    name: 'Y',
-                    expected: expectedState.Y,
-                    actual: emulatorCPU.y
-                });
-            }
-
-            if (emulatorCPU.stkp !== expectedState.SP) {
-                differences.push({
-                    type: 'register',
-                    name: 'SP',
-                    expected: expectedState.SP,
-                    actual: emulatorCPU.stkp
-                });
-            }
-
-            // Compare flags (ensure unused bit is set for fair comparison)
-            const cpuStatus = emulatorCPU.status | 0x20; // Set unused bit
-            const expectedStatus = expectedState.P | 0x20; // Ensure expected also has unused bit
-            if (cpuStatus !== expectedStatus) {
-                const expectedFlags = {
-                    carry: !!(expectedState.P & 0x01),
-                    zero: !!(expectedState.P & 0x02),
-                    interruptDisable: !!(expectedState.P & 0x04),
-                    decimal: !!(expectedState.P & 0x08),
-                    breakFlag: !!(expectedState.P & 0x10),
-                    unused: !!(expectedState.P & 0x20),
-                    overflow: !!(expectedState.P & 0x40),
-                    negative: !!(expectedState.P & 0x80)
-                };
-                
-                const actualFlags = {
-                    carry: !!(emulatorCPU.status & 0x01),
-                    zero: !!(emulatorCPU.status & 0x02),
-                    interruptDisable: !!(emulatorCPU.status & 0x04),
-                    decimal: !!(emulatorCPU.status & 0x08),
-                    breakFlag: !!(emulatorCPU.status & 0x10),
-                    unused: !!(emulatorCPU.status & 0x20),
-                    overflow: !!(emulatorCPU.status & 0x40),
-                    negative: !!(emulatorCPU.status & 0x80)
-                };
-
-                ['carry', 'zero', 'interruptDisable', 'decimal', 'breakFlag', 'unused', 'overflow', 'negative'].forEach(flag => {
-                    if (expectedFlags[flag] !== actualFlags[flag]) {
-                        differences.push({
-                            type: 'flag',
-                            name: flag,
-                            expected: expectedFlags[flag],
-                            actual: actualFlags[flag]
-                        });
-                    }
-                });
-            }
-
-            return {
-                expected: expectedState,
-                actual: emulatorCPU,
-                differences: differences,
-                matches: differences.length === 0
-            };
-        }
-
-        // Find the closest expected state for a given PC address
-        findNearestState(pc) {
-            if (!this.loaded) {
-                throw new Error('Log not loaded yet');
-            }
-
-            // First try exact match
-            const exact = this.states.find(state => state.address === pc);
-            if (exact) {
-                return exact;
-            }
-
-            // Find closest address
-            return this.states.reduce((nearest, state) => {
-                const currentDistance = Math.abs(state.address - pc);
-                const nearestDistance = Math.abs(nearest.address - pc);
-                return currentDistance < nearestDistance ? state : nearest;
-            });
-        }
-    }
-
-    // Singleton instance for the app
-    const logParser = new LogParser();
 
     /**
      * Addressing mode configurations for disassembly
@@ -3139,58 +2503,6 @@ var NESEmulator = (function (exports) {
     initInstructionTable();
 
     /**
-     * Disassemble a range of memory into human-readable assembly
-     * @param {Bus} bus - System bus for memory access
-     * @param {number} startAddr - Starting address to disassemble
-     * @param {number} [count=20] - Number of instructions to disassemble
-     * @returns {string} Formatted disassembly output
-     */
-    function disassemble(bus, startAddr, count = 20) {
-        let output = '';
-        let pc = startAddr;
-
-        for (let i = 0; i < count; i++) {
-            const addr = pc;
-            const opcode = bus.read(pc);
-            const instruction = instructions[opcode];
-            
-            if (!instruction || instruction.name === '???') {
-                // Unknown opcode
-                output += `${addr.toString(16).toUpperCase().padStart(4, '0')}:  ${opcode.toString(16).toUpperCase().padStart(2, '0')}        ???\n`;
-                pc++;
-                continue;
-            }
-            
-            const addrMode = addressingModes[instruction.addrModeName];
-
-            let operand = '';
-            let value = 0;
-            let bytes = [opcode];
-
-            if (addrMode.length === 2) {
-                value = bus.read(pc + 1);
-                bytes.push(value);
-                operand = addrMode.format.replace('${val:02X}', value.toString(16).toUpperCase().padStart(2, '0'));
-            } else if (addrMode.length === 3) {
-                const lo = bus.read(pc + 1);
-                const hi = bus.read(pc + 2);
-                value = (hi << 8) | lo;
-                bytes.push(lo, hi);
-                operand = addrMode.format.replace('${val:04X}', value.toString(16).toUpperCase().padStart(4, '0'));
-            } else {
-                operand = addrMode.format;
-            }
-
-            const bytesStr = bytes.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
-
-            output += `${addr.toString(16).toUpperCase().padStart(4, '0')}:  ${bytesStr.padEnd(8)}  ${instruction.name} ${operand}\n`;
-            pc += addrMode.length;
-        }
-
-        return output;
-    }
-
-    /**
      * Disassemble a single instruction
      * @param {Bus} bus - System bus for memory access
      * @param {number} addr - Address of instruction to disassemble
@@ -3244,840 +2556,169 @@ var NESEmulator = (function (exports) {
         };
     }
 
-    // Global instances
-    exports.nes = void 0;
-    exports.testFramework = void 0;
-    exports.movieSystem = void 0;
-    exports.regressionSuite = void 0;
-
-    // Initialize the emulator when the page loads
-    window.addEventListener('DOMContentLoaded', () => {
-        exports.nes = new NES();
+    /**
+     * Main NES emulator class
+     * Coordinates all hardware components and provides the main emulation interface
+     */
+    class NES {
+        /**
+         * Create new NES emulator instance
+         */
+        constructor() {
+            this.bus = new Bus();
+            this.cpu = new CPU(this.bus);
+            this.ppu = null;
+            this.cartridge = null;
+            
+            // Connect components
+            this.bus.connectCPU(this.cpu);
+            
+            // Debugging and logging
+            this.instructionLog = [];
+            this.pcHistory = [];
+        }
         
-        // Initialize testing systems
-        exports.testFramework = new TestFramework();
-        exports.movieSystem = new MovieSystem();
-        exports.regressionSuite = new RegressionTestSuite();
+        /**
+         * Reset the entire NES system
+         */
+        reset() {
+            this.bus.reset();
+            this.instructionLog = [];
+            this.pcHistory = [];
+        }
         
-        // Setup tests
-        setupTests();
-        
-        // Setup UI
-        setupUI();
-        
-        // Make instances globally accessible
-        window.nes = exports.nes;
-        window.testFramework = exports.testFramework;
-        window.movieSystem = exports.movieSystem;
-        window.regressionSuite = exports.regressionSuite;
-        
-        console.log('NES Emulator with Testing Framework initialized');
-    });
-
-    function setupTests() {
-        // CPU instruction tests
-        exports.testFramework.addTest('CPU - LDA Immediate', () => {
-            exports.nes.reset();
-            exports.nes.cpu.a = 0x00;
-            exports.nes.bus.write(0x8000, 0xA9); // LDA #$42
-            exports.nes.bus.write(0x8001, 0x42);
-            exports.nes.cpu.pc = 0x8000;
-            
-            exports.nes.step(); // Execute LDA
-            
-            if (exports.nes.cpu.a !== 0x42) {
-                throw new Error(`Expected A = $42, got $${exports.nes.cpu.a.toString(16)}`);
-            }
-        });
-        
-        exports.testFramework.addTest('CPU - TAX Transfer', () => {
-            exports.nes.reset();
-            exports.nes.cpu.a = 0x73;
-            exports.nes.cpu.x = 0x00;
-            exports.nes.bus.write(0x8000, 0xAA); // TAX
-            exports.nes.cpu.pc = 0x8000;
-            
-            exports.nes.step(); // Execute TAX
-            
-            if (exports.nes.cpu.x !== 0x73) {
-                throw new Error(`Expected X = $73, got $${exports.nes.cpu.x.toString(16)}`);
-            }
-        });
-        
-        exports.testFramework.addTest('CPU - Zero Page Addressing', () => {
-            exports.nes.reset();
-            exports.nes.bus.write(0x0050, 0x37); // Set value at zero page address
-            exports.nes.bus.write(0x8000, 0xA5); // LDA $50
-            exports.nes.bus.write(0x8001, 0x50);
-            exports.nes.cpu.pc = 0x8000;
-            
-            exports.nes.step(); // Execute LDA
-            
-            if (exports.nes.cpu.a !== 0x37) {
-                throw new Error(`Expected A = $37, got $${exports.nes.cpu.a.toString(16)}`);
-            }
-        });
-        
-        exports.testFramework.addTest('PPU - Register Reset', () => {
-            exports.nes.reset();
-            
-            if (!exports.nes.ppu) {
-                throw new Error('PPU not initialized');
-            }
-            
-            // Check default PPU status
-            if (exports.nes.ppu.status !== 0x00) {
-                throw new Error(`Expected PPU status = $00, got $${exports.nes.ppu.status.toString(16)}`);
-            }
-        });
-        
-        exports.testFramework.addTest('PPU - Palette Memory', () => {
-            exports.nes.reset();
-            
-            // Write to palette memory
-            exports.nes.ppu.ppuWrite(0x3F00, 0x1F);
-            const value = exports.nes.ppu.ppuRead(0x3F00);
-            
-            if (value !== 0x1F) {
-                throw new Error(`Expected palette value = $1F, got $${value.toString(16)}`);
-            }
-        });
-        
-        exports.testFramework.addTest('Bus - Memory Mapping', () => {
-            exports.nes.reset();
-            
-            // Test RAM access
-            exports.nes.bus.write(0x0000, 0x42);
-            const ramValue = exports.nes.bus.read(0x0000);
-            
-            if (ramValue !== 0x42) {
-                throw new Error(`Expected RAM value = $42, got $${ramValue.toString(16)}`);
-            }
-            
-            // Test RAM mirroring
-            const mirrorValue = exports.nes.bus.read(0x0800);
-            if (mirrorValue !== 0x42) {
-                throw new Error(`Expected RAM mirror value = $42, got $${mirrorValue.toString(16)}`);
-            }
-        });
-        
-        exports.testFramework.addTest('CRC32 - Basic Check', () => {
-            const data = new Uint8Array([0x48, 0x65, 0x6C, 0x6C, 0x6F]); // "Hello"
-            const hash = CRC32.compute(data);
-            
-            // Known CRC32 for "Hello"
-            const expectedHash = 0x0BF4FE626;
-            if (hash !== expectedHash) {
-                throw new Error(`Expected CRC32 = ${expectedHash.toString(16)}, got ${hash.toString(16)}`);
-            }
-        });
-    }
-
-    function setupUI() {
-        setupROMLoader();
-        setupControls();
-        setupDebug();
-        setupTestingUI();
-        setupCollapsibleSections();
-    }
-
-    function setupROMLoader() {
-        const fileInput = document.createElement('input');
-        fileInput.type = 'file';
-        fileInput.accept = '.nes';
-        fileInput.style.cssText = 'position: fixed; top: 10px; right: 10px; z-index: 1000;';
-        
-        fileInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                try {
-                    console.log('Loading ROM:', file.name);
-                    const cartridge = await loadROM(file);
-                    exports.nes.loadCartridge(cartridge);
-                    console.log('ROM loaded successfully!');
-                    console.log('PRG Banks:', cartridge.prgBanks);
-                    console.log('CHR Banks:', cartridge.chrBanks);
-                    console.log('Mapper:', cartridge.mapperID);
-                    
-                    updateStatus(`ROM loaded: ${file.name}`);
-                    updateDebug();
-                    updateDisassembly();
-                    
-                    // Clear instruction log
-                    document.getElementById('instruction-log-output').textContent = '';
-                } catch (error) {
-                    console.error('Failed to load ROM:', error);
-                    updateStatus(`Error: ${error.message}`);
+        /**
+         * Execute one system clock cycle
+         */
+        clock() {
+            // Store PC before clocking if a new instruction is about to start
+            if (this.cpu.cycles === 0) {
+                this.pcHistory.push(this.cpu.pc);
+                if (this.pcHistory.length > 100) {
+                    this.pcHistory.shift();
                 }
             }
-        });
-        
-        document.body.appendChild(fileInput);
-    }
 
-    function setupControls() {
-        const resetBtn = document.getElementById('resetBtn');
-        const stepBtn = document.getElementById('stepBtn');
-        const runBtn = document.getElementById('runBtn');
-        const stopBtn = document.getElementById('stopBtn');
-        const testBtn = document.getElementById('testBtn');
+            this.bus.clock();
+            
+            // If an instruction just finished, log it
+            if (this.cpu.cycles === 0) {
+                this._logInstruction();
+            }
+        }
         
-        // Setup keyboard input
-        setupKeyboardInput();
+        /**
+         * Execute one CPU instruction (may span multiple clock cycles)
+         */
+        step() {
+            this.clock();
+        }
         
-        let isRunning = false;
-        let animationId = null;
-        
-        resetBtn.addEventListener('click', () => {
-            exports.nes.reset();
-            updateDebug();
-            updateDisassembly();
-            updateScreen();
-            updateStatus('Reset');
-        });
-        
-        stepBtn.addEventListener('click', () => {
-            exports.nes.step();
-            updateDebug();
-            updateDisassembly();
-            logInstruction();
-            updateScreen();
-        });
-        
-        runBtn.addEventListener('click', () => {
-            if (!isRunning) {
-                isRunning = true;
-                updateStatus('Running');
+        /**
+         * Loads a ROM from a Uint8Array.
+         * @param {Uint8Array} romData - The raw byte data of the .nes file.
+         * @returns {boolean} - True on successful load, false otherwise.
+         */
+        load(romData) {
+            try {
+                const cartridge = Cartridge.fromINES(romData);
+                this.cartridge = cartridge;
                 
-                function run() {
-                    if (isRunning) {
-                        // Execute several CPU cycles per frame
-                        for (let i = 0; i < 1000; i++) {
-                            exports.nes.step();
-                        }
-                        updateDebug();
-                        updateDisassembly();
-                        updateScreen();
-                        animationId = requestAnimationFrame(run);
-                    }
-                }
-                run();
-            }
-        });
-        
-        stopBtn.addEventListener('click', () => {
-            isRunning = false;
-            if (animationId) {
-                cancelAnimationFrame(animationId);
-                animationId = null;
-            }
-            updateStatus('Stopped');
-        });
-        
-        testBtn.addEventListener('click', async () => {
-            await runNestestTest();
-        });
-    }
-
-    function setupDebug() {
-        updateDebug();
-        updateDisassembly();
-        
-        // Set up screen update interval
-        setInterval(() => {
-            if (document.hidden === false && !document.getElementById('stopBtn').disabled) {
-                updateScreen();
-            }
-        }, 16); // ~60 FPS
-    }
-
-    function setupTestingUI() {
-        const testingContainer = document.createElement('div');
-        testingContainer.style.cssText = 'margin-top: 20px; padding: 10px; background: #111; border: 1px solid #333; font-size: 12px;';
-        
-        const runTestsBtn = document.createElement('button');
-        runTestsBtn.textContent = 'Run All Tests';
-        runTestsBtn.style.cssText = 'margin: 5px; padding: 5px 10px; background: #333; color: #fff; border: none; cursor: pointer; font-family: monospace;';
-        
-        const movieRecordBtn = document.createElement('button');
-        movieRecordBtn.textContent = 'Start Recording';
-        movieRecordBtn.style.cssText = 'margin: 5px; padding: 5px 10px; background: #333; color: #fff; border: none; cursor: pointer; font-family: monospace;';
-        
-        const testOutput = document.createElement('div');
-        testOutput.id = 'testOutput';
-        testOutput.style.cssText = 'margin-top: 10px; white-space: pre-wrap; max-height: 200px; overflow-y: auto;';
-        
-        runTestsBtn.addEventListener('click', async () => {
-            testOutput.textContent = 'Running tests...\n';
-            
-            await exports.testFramework.runTests();
-            const report = exports.testFramework.generateReport();
-            testOutput.textContent = report;
-        });
-        
-        let recording = false;
-        movieRecordBtn.addEventListener('click', () => {
-            if (!recording) {
-                exports.movieSystem.startRecording();
-                movieRecordBtn.textContent = 'Stop Recording';
-                recording = true;
-                updateStatus('Recording movie');
-            } else {
-                exports.movieSystem.stopRecording();
-                movieRecordBtn.textContent = 'Start Recording';
-                recording = false;
-                updateStatus('Stopped recording');
+                // Create and connect PPU
+                this.ppu = new PPU(this.bus);
+                this.ppu.connectCartridge(cartridge);
+                this.bus.connectPPU(this.ppu);
                 
-                if (exports.movieSystem.frames.length > 0) {
-                    exports.movieSystem.saveMovie();
-                }
-            }
-        });
-        
-        testingContainer.appendChild(document.createTextNode('Testing Framework: '));
-        testingContainer.appendChild(runTestsBtn);
-        testingContainer.appendChild(movieRecordBtn);
-        testingContainer.appendChild(testOutput);
-        
-        document.body.appendChild(testingContainer);
-        
-        // Add movie load input
-        const movieInput = document.createElement('input');
-        movieInput.type = 'file';
-        movieInput.accept = '.json';
-        movieInput.style.cssText = 'margin: 5px; padding: 5px; background: #333; color: #fff; border: none; font-family: monospace;';
-        
-        movieInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                try {
-                    await exports.movieSystem.loadMovie(file);
-                    updateStatus(`Loaded movie: ${file.name}`);
-                } catch (error) {
-                    updateStatus(`Error loading movie: ${error.message}`);
-                }
-            }
-        });
-        
-        testingContainer.appendChild(document.createTextNode(' Load Movie: '));
-        testingContainer.appendChild(movieInput);
-    }
-
-    function updateDebug() {
-        const debugEl = document.getElementById('debug');
-        if (!debugEl) return; // Debug section may be collapsed
-        
-        const state = exports.nes.dumpCPUState();
-        const ppuStatus = exports.nes.ppu ? {
-            cycle: exports.nes.ppu.cycle,
-            scanline: exports.nes.ppu.scanline,
-            frame: exports.nes.ppu.frame,
-            control: exports.nes.ppu.control.toString(16).padStart(2, '0'),
-            mask: exports.nes.ppu.mask.toString(16).padStart(2, '0'),
-            status: exports.nes.ppu.status.toString(16).padStart(2, '0'),
-        } : { cycle: '-', scanline: '-', frame: '-', control: '-', mask: '-', status: '-' };
-        
-        debugEl.innerHTML = `CPU State:
-A: $${state.a}  X: $${state.x}  Y: $${state.y}  SP: $${state.stkp}
-PC: $${state.pc}
-Status: ${state.status} (N V - B D I Z C)
-
-PPU State:
-Cycle: ${ppuStatus.cycle}  Scanline: ${ppuStatus.scanline}  Frame: ${ppuStatus.frame}
-CTRL: $${ppuStatus.control}  MASK: $${ppuStatus.mask}  STATUS: $${ppuStatus.status}
-
-<div style="margin-top: 10px;">
-    <button id="downloadDisassembly" style="margin: 5px; padding: 5px 10px; background: #333; color: #fff; border: none; cursor: pointer; font-family: monospace;">Download Disassembly</button>
-    <button id="viewTiles" style="margin: 5px; padding: 5px 10px; background: #333; color: #fff; border: none; cursor: pointer; font-family: monospace;">View Tiles</button>
-    <button id="viewMemory" style="margin: 5px; padding: 5px 10px; background: #333; color: #fff; border: none; cursor: pointer; font-family: monospace;">View Memory</button>
-    <button id="clearLog" style="margin: 5px; padding: 5px 10px; background: #333; color: #fff; border: none; cursor: pointer; font-family: monospace;">Clear Log</button>
-    <button id="stepBack" style="margin: 5px; padding: 5px 10px; background: #333; color: #fff; border: none; cursor: pointer; font-family: monospace;">Step Back</button>
-</div>`;
-        
-        // Add event listeners for new buttons
-        const downloadBtn = document.getElementById('downloadDisassembly');
-        const viewTilesBtn = document.getElementById('viewTiles');
-        const viewMemoryBtn = document.getElementById('viewMemory');
-        const clearLogBtn = document.getElementById('clearLog');
-        const stepBackBtn = document.getElementById('stepBack');
-        
-        if (downloadBtn) {
-            downloadBtn.addEventListener('click', downloadDisassembly);
-        }
-        
-        if (viewTilesBtn) {
-            viewTilesBtn.addEventListener('click', viewTiles);
-        }
-        
-        if (viewMemoryBtn) {
-            viewMemoryBtn.addEventListener('click', viewMemory);
-        }
-        
-        if (clearLogBtn) {
-            clearLogBtn.addEventListener('click', clearInstructionLog);
-        }
-        
-        if (stepBackBtn) {
-            stepBackBtn.addEventListener('click', stepBack);
-        }
-    }
-
-    function updateDisassembly() {
-        const disassemblyEl = document.getElementById('disassembly-output');
-        if (!disassemblyEl || !exports.nes.cartridge) {
-            if (disassemblyEl) disassemblyEl.textContent = 'Load a ROM to see disassembly';
-            return;
-        }
-        
-        // Disassemble around current PC
-        const currentPC = exports.nes.cpu.pc;
-        const startAddr = Math.max(0x8000, currentPC - 0x20);
-        const disassembly = disassemble(exports.nes.bus, startAddr, 50);
-        
-        disassemblyEl.textContent = disassembly;
-        
-        // Highlight current instruction
-        const lines = disassemblyEl.textContent.split('\n');
-        const highlightedLines = lines.map((line, index) => {
-            const lineAddr = parseInt(line.substring(0, 4), 16);
-            if (lineAddr === currentPC) {
-                return `>>> ${line}`;
-            }
-            return `    ${line}`;
-        });
-        
-        disassemblyEl.textContent = highlightedLines.join('\n');
-    }
-
-    function logInstruction() {
-        const logEl = document.getElementById('instruction-log-output');
-        if (!logEl || !exports.nes.cartridge) return;
-        
-        const instruction = disassembleInstruction(exports.nes.bus, exports.nes.cpu.pc);
-        const state = exports.nes.cpu.getState();
-        
-        const logEntry = `$${instruction.addr.toString(16).padStart(4, '0').toUpperCase()}:  ${instruction.bytes.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}  ${instruction.mnemonic} ${instruction.operand}  |  A:$${state.A.toString(16).padStart(2, '0').toUpperCase()} X:$${state.X.toString(16).padStart(2, '0').toUpperCase()} Y:$${state.Y.toString(16).padStart(2, '0').toUpperCase()} P:$${state.P.toString(16).padStart(2, '0').toUpperCase()} SP:$${state.SP.toString(16).padStart(2, '0').toUpperCase()}`;
-        
-        let currentLog = logEl.textContent;
-        if (!currentLog) currentLog = '';
-        
-        // Keep only last 100 instructions
-        const logLines = currentLog.split('\n').filter(line => line.trim());
-        logLines.push(logEntry);
-        if (logLines.length > 100) {
-            logLines.shift(); // Remove oldest line
-        }
-        
-        logEl.textContent = logLines.join('\n');
-        logEl.scrollTop = logEl.scrollHeight;
-        
-        // Store for debugging
-        window.lastInstruction = logEntry;
-    }
-
-    function clearInstructionLog() {
-        const logEl = document.getElementById('instruction-log-output');
-        if (logEl) {
-            logEl.textContent = '';
-            window.lastInstruction = null;
-        }
-    }
-
-    function updateScreen() {
-        if (!exports.nes.ppu) return;
-        
-        // Only update when a complete frame is ready (during vblank)
-        if (exports.nes.ppu.scanline < 241) {
-            return; // Still in visible rendering phase
-        }
-        
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const imageData = ctx.createImageData(256, 240);
-        
-        const screenData = exports.nes.ppu.getScreen();
-        imageData.data.set(screenData);
-        
-        ctx.putImageData(imageData, 0, 0);
-    }
-
-    function setupKeyboardInput() {
-        document.addEventListener('keydown', (e) => {
-            if (!exports.nes.bus.controller1) return;
-            
-            switch(e.code) {
-                case 'KeyX': case 'ButtonX':
-                    exports.nes.bus.controller1.setButtonState('A', true);
-                    break;
-                case 'KeyZ': case 'ButtonZ':
-                    exports.nes.bus.controller1.setButtonState('B', true);
-                    break;
-                case 'Enter': case 'NumpadEnter':
-                    exports.nes.bus.controller1.setButtonState('START', true);
-                    break;
-                case 'ShiftLeft': case 'ShiftRight':
-                    exports.nes.bus.controller1.setButtonState('SELECT', true);
-                    break;
-                case 'ArrowUp': case 'KeyW':
-                    exports.nes.bus.controller1.setButtonState('UP', true);
-                    break;
-                case 'ArrowDown': case 'KeyS':
-                    exports.nes.bus.controller1.setButtonState('DOWN', true);
-                    break;
-                case 'ArrowLeft': case 'KeyA':
-                    exports.nes.bus.controller1.setButtonState('LEFT', true);
-                    break;
-                case 'ArrowRight': case 'KeyD':
-                    exports.nes.bus.controller1.setButtonState('RIGHT', true);
-                    break;
-            }
-            e.preventDefault();
-        });
-        
-        document.addEventListener('keyup', (e) => {
-            if (!exports.nes.bus.controller1) return;
-            
-            switch(e.code) {
-                case 'KeyX': case 'ButtonX':
-                    exports.nes.bus.controller1.setButtonState('A', false);
-                    break;
-                case 'KeyZ': case 'ButtonZ':
-                    exports.nes.bus.controller1.setButtonState('B', false);
-                    break;
-                case 'Enter': case 'NumpadEnter':
-                    exports.nes.bus.controller1.setButtonState('START', false);
-                    break;
-                case 'ShiftLeft': case 'ShiftRight':
-                    exports.nes.bus.controller1.setButtonState('SELECT', false);
-                    break;
-                case 'ArrowUp': case 'KeyW':
-                    exports.nes.bus.controller1.setButtonState('UP', false);
-                    break;
-                case 'ArrowDown': case 'KeyS':
-                    exports.nes.bus.controller1.setButtonState('DOWN', false);
-                    break;
-                case 'ArrowLeft': case 'KeyA':
-                    exports.nes.bus.controller1.setButtonState('LEFT', false);
-                    break;
-                case 'ArrowRight': case 'KeyD':
-                    exports.nes.bus.controller1.setButtonState('RIGHT', false);
-                    break;
-            }
-            e.preventDefault();
-        });
-    }
-
-    function downloadDisassembly() {
-        const currentPC = exports.nes.cpu.pc;
-        const startAddr = Math.max(0x8000, currentPC - 0x100);
-        const disassembly = disassemble(exports.nes.bus, startAddr, 1000);
-        
-        const blob = new Blob([disassembly], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `nes_disassembly_${currentPC.toString(16).toUpperCase()}.txt`;
-        a.click();
-        URL.revokeObjectURL(url);
-    }
-
-    function viewTiles() {
-        if (!exports.nes.ppu || !exports.nes.cartridge) {
-            updateStatus('Load a ROM to view tiles');
-            return;
-        }
-        
-        const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 640; // Taller to show palettes
-        const ctx = canvas.getContext('2d');
-        
-        // Draw all pattern tiles from CHR ROM
-        const patternTableSize = 0x1000; // 4KB per pattern table
-        const tileSize = 8;
-        const tilesPerRow = 16;
-        const tilesPerCol = 16;
-        
-        for (let table = 0; table < 2; table++) {
-            for (let tileY = 0; tileY < tilesPerCol; tileY++) {
-                for (let tileX = 0; tileX < tilesPerRow; tileX++) {
-                    const tileIndex = tileY * tilesPerRow + tileX;
-                    const tileAddr = table * patternTableSize + tileIndex * 16;
-                    
-                    // Draw 8x8 tile
-                    for (let row = 0; row < tileSize; row++) {
-                        for (let col = 0; col < tileSize; col++) {
-                            const bitPlane1Addr = tileAddr + row;
-                            const bitPlane2Addr = tileAddr + row + 8;
-                            
-                            const bit1 = exports.nes.ppu.ppuRead(bitPlane1Addr);
-                            const bit2 = exports.nes.ppu.ppuRead(bitPlane2Addr);
-                            
-                            const bitMask = 1 << (7 - col);
-                            const bit1Value = (bit1 & bitMask) ? 1 : 0;
-                            const bit2Value = (bit2 & bitMask) ? 2 : 0;
-                            const patternValue = bit1Value | bit2Value;
-                            
-                            // Get color from palette 0 (background palette)
-                            const colorIndex = exports.nes.ppu.getColorFromPalette(0, patternValue);
-                            const color = exports.nes.ppu.getNESColor(colorIndex);
-                            
-                            const x = table * 256 + tileX * tileSize + col;
-                            const y = tileY * tileSize + row;
-                            
-                            ctx.fillStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
-                            ctx.fillRect(x, y, 1, 1);
-                        }
-                    }
-                }
+                this.bus.connectCartridge(cartridge);
+                this.reset();
+                return true;
+            } catch (e) {
+                console.error("Error loading ROM:", e);
+                return false;
             }
         }
         
-        // Draw palette display below pattern tables
-        ctx.fillStyle = '#fff';
-        ctx.font = '14px monospace';
-        ctx.fillText('Current NES Palettes:', 10, 520);
-        
-        // Draw all 8 palettes
-        for (let palette = 0; palette < 8; palette++) {
-            // Label
-            ctx.fillText(`Palette ${palette}:`, 10 + palette * 180, 520);
-            
-            // Draw colors in this palette
-            for (let color = 0; color < 4; color++) {
-                const colorIndex = exports.nes.ppu.getColorFromPalette(palette, color);
-                const nesColor = exports.nes.ppu.getNESColor(colorIndex);
-                ctx.fillStyle = `rgb(${nesColor.r}, ${nesColor.g}, ${nesColor.b})`;
-                ctx.fillRect(10 + palette * 180 + color * 40, 540, 35, 18);
-                
-                // Add border for transparent color (index 0)
-                if (color === 0) {
-                    ctx.strokeStyle = '#666';
-                    ctx.strokeRect(10 + palette * 180 + color * 40, 540, 35, 18);
-                }
-            }
-        }
-        
-        // Draw palette display below pattern tables
-        ctx.fillStyle = '#fff';
-        ctx.font = '14px monospace';
-        ctx.fillText('Current NES Palettes:', 10, 520);
-        
-        // Draw all 8 palettes
-        for (let palette = 0; palette < 8; palette++) {
-            // Label
-            ctx.fillText(`Palette ${palette}:`, 10 + palette * 180, 520);
-            
-            // Draw colors in this palette
-            for (let color = 0; color < 4; color++) {
-                const colorIndex = exports.nes.ppu.getColorFromPalette(palette, color);
-                const nesColor = exports.nes.ppu.getNESColor(colorIndex);
-                ctx.fillStyle = `rgb(${nesColor.r}, ${nesColor.g}, ${nesColor.b})`;
-                ctx.fillRect(10 + palette * 180 + color * 40, 540, 35, 18);
-                
-                // Add border for transparent color (index 0)
-                if (color === 0) {
-                    ctx.strokeStyle = '#666';
-                    ctx.strokeRect(10 + palette * 180 + color * 40, 540, 35, 18);
-                }
-            }
-        }
-        
-        // Create new window to display tiles
-        const tileWindow = window.open('', '_blank');
-        tileWindow.document.write(`
-        <html>
-        <head><title>Pattern Tables</title></head>
-        <body style="margin:0; padding:20px; background:#222; color:#fff;">
-            <h2>NES Pattern Tables</h2>
-            <p>Each tile shows 8x8 pixels using Palette 0 (background palette).</p>
-            <p>Bottom shows all 8 palettes with their 4 colors each.</p>
-            <img src="${canvas.toDataURL()}" style="image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: -webkit-crisp-edges;">
-        </body>
-        </html>
-    `);
-    }
+        // --- Debugging Methods ---
 
-    function viewMemory() {
-        if (!exports.nes.cartridge) {
-            updateStatus('Load a ROM to view memory');
-            return;
-        }
-        
-        const memoryWindow = window.open('', '_blank');
-        let memoryHTML = '<html><head><title>Memory Viewer</title><style>body { font-family: monospace; background: #222; color: #fff; padding: 20px; } table { border-collapse: collapse; } td { padding: 2px 4px; border: 1px solid #444; } .addr { font-weight: bold; }</style></head><body>';
-        memoryHTML += '<h2>NES Memory Viewer</h2>';
-        memoryHTML += '<table>';
-        memoryHTML += '<tr><th>Address</th><th>00</th><th>01</th><th>02</th><th>03</th><th>04</th><th>05</th><th>06</th><th>07</th><th>08</th><th>09</th><th>0A</th><th>0B</th><th>0C</th><th>0D</th><th>0E</th><th>0F</th></tr>';
-        
-        // Show main RAM first 256 bytes
-        for (let page = 0; page < 16; page++) {
-            memoryHTML += `<tr><td class="addr">$${page.toString(16)}0</td>`;
-            for (let col = 0; col < 16; col++) {
-                const addr = page * 16 + col;
-                const value = exports.nes.bus.read(addr);
-                memoryHTML += `<td>$${value.toString(16).padStart(2, '0').toUpperCase()}</td>`;
-            }
-            memoryHTML += '</tr>';
-        }
-        
-        memoryHTML += '</table></body></html>';
-        memoryWindow.document.write(memoryHTML);
-    }
+        /**
+         * Disassembles a range of memory addresses.
+         * @param {number} startAddr - The starting address.
+         * @param {number} endAddr - The ending address.
+         * @returns {Array<Object>} - An array of disassembled instruction objects.
+         */
+        disassemble(startAddr, endAddr) {
+            if (!this.cartridge) return [];
 
-    function stepBack() {
-        if (window.lastInstruction && exports.nes.cartridge) {
-            // Go back one instruction
-            const pcMatch = window.lastInstruction.match(/\$([0-9A-F]+)/);
-            if (pcMatch) {
-                const targetPC = parseInt(pcMatch[1], 16);
-                exports.nes.cpu.pc = targetPC;
-                updateDebug();
-                updateDisassembly();
-            }
-        }
-    }
-
-    function updateStatus(message) {
-        const statusEl = document.getElementById('status');
-        statusEl.textContent = message;
-        console.log('Status:', message);
-    }
-
-    async function runNestestTest() {
-        updateStatus('Loading nestest.nes and test data...');
-        
-        try {
-            // Load the test log
-            const logResponse = await fetch('tests/nestest.log');
-            const logText = await logResponse.text();
-            await logParser.load(logText);
+            const output = [];
+            let addr = startAddr;
             
-            // Load the test ROM
-            const romResponse = await fetch('tests/nestest.nes');
-            const romData = await romResponse.arrayBuffer();
-            const romFile = new File([romData], 'nestest.nes', { type: 'application/x-nes' });
-            
-            const cartridge = await loadROM(romFile);
-            exports.nes.loadCartridge(cartridge);
-            
-            // Reset and set PC to $C000 (start of nestest)
-            exports.nes.reset();
-            exports.nes.cpu.pc = 0xC000;
-            
-            updateStatus('Running nestest comparison...');
-            const testResultsEl = document.getElementById('testResults');
-            testResultsEl.style.display = 'block';
-            testResultsEl.innerHTML = '<div class="test-info">Starting nestest comparison...</div>';
-            
-            // Run step-by-step comparison
-            let totalTests = 0;
-            let passedTests = 0;
-            let failedTests = 0;
-            let outputHTML = '';
-            
-            // Limit to first 500 lines for initial testing
-            const maxLines = Math.min(500, logParser.states.length);
-            
-            for (let i = 1; i <= maxLines; i++) {
-                const expectedState = logParser.getState(i);
-                if (!expectedState) continue;
-                
-                // Get current state before stepping
-                const currentState = exports.nes.cpu.getState();
-                
-                // Step to next instruction
-                exports.nes.step();
-                
-                // Compare states
-                const comparison = logParser.compare(exports.nes.cpu, i);
-                totalTests++;
-                
-                if (comparison.matches) {
-                    passedTests++;
-                    outputHTML += `<div class="test-match">Line ${i}: ✓ ${expectedState.mnemonic} ${expectedState.operand}</div>`;
-                } else {
-                    failedTests++;
-                    outputHTML += `<div class="test-mismatch">Line ${i}: ✗ ${expectedState.mnemonic} ${expectedState.operand}</div>`;
-                    
-                    // Show details of the mismatch
-                    comparison.differences.forEach(diff => {
-                        if (diff.type === 'register') {
-                            const pad = (str, length, char) => str.padStart ? str.padStart(length, char) : char.repeat(Math.max(0, length - str.length)) + str;
-                            outputHTML += `<div class="test-mismatch">    ${diff.name}: expected ${pad(diff.expected.toString(16).toUpperCase(), 2, '0')}, got ${pad(diff.actual.toString(16).toUpperCase(), 2, '0')}</div>`;
-                        } else if (diff.type === 'flag') {
-                            outputHTML += `<div class="test-mismatch">    flag ${diff.name}: expected ${diff.expected}, got ${diff.actual}</div>`;
-                        }
-                    });
-                    
-                    outputHTML += `<div class="test-mismatch">    Expected: ${expectedState.toString()}</div>`;
-                    const pad = (str, length, char) => str.padStart ? str.padStart(length, char) : char.repeat(Math.max(0, length - str.length)) + str;
-                    outputHTML += `<div class="test-mismatch">    Actual: A:${pad(exports.nes.cpu.a.toString(16).toUpperCase(), 2, '0')} X:${pad(exports.nes.cpu.x.toString(16).toUpperCase(), 2, '0')} Y:${pad(exports.nes.cpu.y.toString(16).toUpperCase(), 2, '0')} P:${pad(exports.nes.cpu.status.toString(16).toUpperCase(), 2, '0')} SP:${pad(exports.nes.cpu.stkp.toString(16).toUpperCase(), 2, '0')}</div>`;
-                }
-                
-                // Update UI periodically
-                if (i % 50 === 0) {
-                    testResultsEl.innerHTML = `
-                    <div class="test-info">Progress: ${i}/${maxLines} lines tested</div>
-                    <div class="test-info">Passed: ${passedTests}, Failed: ${failedTests}</div>
-                    <div style="max-height: 200px; overflow-y: auto;">
-                        ${outputHTML}
-                    </div>
-                `;
-                    updateDebug();
-                    await new Promise(resolve => setTimeout(resolve, 1)); // Allow UI update
-                }
-                
-                // Stop early if too many failures
-                if (failedTests > 100) {
-                    outputHTML += `<div class="test-mismatch">Stopped early due to too many failures</div>`;
-                    break;
-                }
+            while (addr <= endAddr && output.length < 100) {
+                const result = disassembleInstruction(this.bus, addr);
+                const instruction = `${result.mnemonic} ${result.operand}`;
+                output.push({ addr: result.addr, instruction });
+                addr += result.length;
             }
             
-            // Final results
-            testResultsEl.innerHTML = `
-            <div class="test-info">Test Results:</div>
-            <div class="test-info">Total: ${totalTests}, Passed: ${passedTests}, Failed: ${failedTests}</div>
-            <div class="${failedTests === 0 ? 'test-match' : 'test-mismatch'}">
-                ${failedTests === 0 ? '✓ All tests passed!' : `✗ ${failedTests} tests failed`}
-            </div>
-            <div style="max-height: 200px; overflow-y: auto; margin-top: 10px;">
-                ${outputHTML}
-            </div>
-        `;
+            return output;
+        }
+
+        /**
+         * Retrieves the internal instruction log.
+         * @returns {string[]} - An array of formatted instruction log strings.
+         */
+        getInstructionLog() {
+            return this.instructionLog;
+        }
+
+        /**
+         * Internal helper to log the most recently executed instruction.
+         * @private
+         */
+        _logInstruction() {
+            if (!this.cartridge || this.pcHistory.length === 0) return;
+
+            const pc = this.pcHistory.pop();
+            const state = this.cpu.getState();
+            const inst = disassembleInstruction(this.bus, pc);
+
+            const stateStr = `A:${state.A.toString(16).toUpperCase().padStart(2, '0')} X:${state.X.toString(16).toUpperCase().padStart(2, '0')} Y:${state.Y.toString(16).toUpperCase().padStart(2, '0')} P:${state.P.toString(16).toUpperCase().padStart(2, '0')} SP:${state.SP.toString(16).toUpperCase().padStart(2, '0')}`;
+            const logEntry = `0x${pc.toString(16).toUpperCase().padStart(4, '0')} - ${inst.mnemonic} ${inst.operand} - ${stateStr}`;
             
-            updateStatus(`Test completed: ${passedTests}/${totalTests} passed`);
-            
-        } catch (error) {
-            console.error('Test failed:', error);
-            updateStatus(`Test failed: ${error.message}`);
-            document.getElementById('testResults').innerHTML = `<div class="test-mismatch">Test failed: ${error.message}</div>`;
+            this.instructionLog.push(logEntry);
+            if (this.instructionLog.length > 100) {
+                this.instructionLog.shift();
+            }
+        }
+
+        // For testing/debugging
+        dumpCPUState() {
+            return {
+                a: this.cpu.a.toString(16).padStart(2, '0'),
+                x: this.cpu.x.toString(16).padStart(2, '0'),
+                y: this.cpu.y.toString(16).padStart(2, '0'),
+                stkp: this.cpu.stkp.toString(16).padStart(2, '0'),
+                pc: this.cpu.pc.toString(16).padStart(4, '0'),
+                status: this.cpu.status.toString(2).padStart(8, '0')
+            };
+        }
+        
+        getScreen() {
+            return this.ppu ? this.ppu.getScreen() : null;
         }
     }
 
-    function setupCollapsibleSections() {
-        const collapsibles = document.querySelectorAll('.collapsible');
-        
-        collapsibles.forEach(button => {
-            button.addEventListener('click', function() {
-                this.classList.toggle('collapsed');
-                const content = this.nextElementSibling;
-                content.classList.toggle('collapsed');
-            });
-        });
-        
-        // Set initial states (debug expanded, others collapsed)
-        document.getElementById('disassembly-toggle').classList.add('collapsed');
-        document.getElementById('disassembly-content').classList.add('collapsed');
-        document.getElementById('instruction-log-toggle').classList.add('collapsed');
-        document.getElementById('instruction-log-content').classList.add('collapsed');
-    }
+    const nes = new NES();
+    const controller = new Controller();
 
-    // Export for module usage
-    const controller=new Controller();
+    // Connect controller to the bus
+    nes.bus.connectController(controller);
 
+    // Make instances globally accessible for debugging, and export them for module usage
+    window.nes = nes;
+
+    exports.FLAGS = FLAGS;
     exports.controller = controller;
+    exports.nes = nes;
 
     return exports;
 

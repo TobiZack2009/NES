@@ -871,6 +871,10 @@ reset() {
     getScreen() {
         return this.screen;
     }
+
+    getScreenBuffer() {
+        return this.getScreen();
+    }
     
     // Check if NMI should be triggered
     checkNMI() {
