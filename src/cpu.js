@@ -97,6 +97,53 @@ export class CPU {
     getFlag(f) {
         return (this.status & f) > 0 ? 1 : 0;
     }
+    
+    // Instruction tracing
+    enableTrace() {
+        this.traceEnabled = true;
+        this.trace = [];
+    }
+    
+    disableTrace() {
+        this.traceEnabled = false;
+    }
+    
+    getTrace() {
+        return this.trace.slice(); // Return copy of trace
+    }
+    
+    clearTrace() {
+        this.trace = [];
+    }
+    
+    addTraceEntry(opcode, addrData, cycles) {
+        if (!this.traceEnabled) return;
+        
+        const entry = {
+            pc: this.pc - (this.lookup[opcode].name === 'JSR' ? 2 : 1), // Adjust PC for JSR
+            opcode: opcode,
+            name: this.lookup[opcode].name,
+            addr: addrData.addr,
+            addrMode: this.lookup[opcode].addrMode.name,
+            a: this.a.toString(16).padStart(2, '0').toUpperCase(),
+            x: this.x.toString(16).padStart(2, '0').toUpperCase(),
+            y: this.y.toString(16).padStart(2, '0').toUpperCase(),
+            sp: this.stkp.toString(16).padStart(2, '0').toUpperCase(),
+            status: this.status.toString(16).padStart(2, '0').toUpperCase(),
+            cycles: cycles,
+            ppu: this.bus.ppu ? {
+                scanline: this.bus.ppu.scanline,
+                cycle: this.bus.ppu.cycle
+            } : null
+        };
+        
+        this.trace.push(entry);
+        
+        // Limit trace size to prevent memory issues
+        if (this.trace.length > 10000) {
+            this.trace = this.trace.slice(-5000);
+        }
+    }
 
     /**
      * Get current CPU state for debugging and testing

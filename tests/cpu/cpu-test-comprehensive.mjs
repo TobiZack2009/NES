@@ -275,7 +275,7 @@ async function main() {
     
     switch (command) {
         case 'run':
-            const maxTests = parseInt(args[0]) || 100;
+            const maxTests = parseInt(args[1]) || 100;
             await runner.runTests(maxTests);
             runner.analyzeFailures();
             break;
@@ -304,7 +304,7 @@ Examples:
     }
 }
 
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
     main().catch(console.error);
 }
 

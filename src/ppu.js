@@ -99,9 +99,14 @@ reset() {
         // Clear OAM
         this.oam.fill(0);
         
-        // Clear palette with default values
+        // Initialize palette with default values
+        // Set up default palettes with grays for background and colors for sprites
         for (let i = 0; i < 32; i++) {
-            this.palette[i] = i % 4 === 0 ? 0x0F : (i - 1) % 4 + 1;
+            if (i % 4 === 0) {
+                this.palette[i] = 0x0F; // Universal background color (black)
+            } else {
+                this.palette[i] = (i - 1) % 4 + 1; // Simple color progression
+            }
         }
         
         // Clear screen buffer
@@ -557,10 +562,23 @@ reset() {
     }
     
     getColorFromPalette(palette, index) {
+        // Palette memory layout according to PPU reference
+        // Background palettes: $3F00-$3F0F (4 palettes * 4 colors)
+        // Sprite palettes: $3F10-$3F1F (4 palettes * 4 colors)
+        // Note: $3F00, $3F04, $3F08, $3F0C, $3F10, $3F14, $3F18, $3F1C are mirrors
         if (palette === 0 && index === 0) {
             return 0x0F; // Universal background color
         }
-        const addr = 0x3F00 + (palette * 4 + index);
+        
+        let addr;
+        if (palette < 4) {
+            // Background palettes
+            addr = 0x3F00 + palette * 4 + index;
+        } else {
+            // Sprite palettes
+            addr = 0x3F10 + (palette - 4) * 4 + index;
+        }
+        
         return this.ppuRead(addr) & 0x3F;
     }
     

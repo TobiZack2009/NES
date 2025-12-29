@@ -364,7 +364,7 @@ export const opcodes = {
     
     // PLP - Pull Processor Status
     PLP: function(addrData) {
-        this.status = this.pull();
+        this.status = this.pull() & ~FLAGS.B;
         this.setFlag(FLAGS.U, true);
         return 0;
     },

@@ -562,7 +562,7 @@ var NESEmulator = (function (exports) {
         
         // PLP - Pull Processor Status
         PLP: function(addrData) {
-            this.status = this.pull();
+            this.status = this.pull() & ~FLAGS$1.B;
             this.setFlag(FLAGS$1.U, true);
             return 0;
         },
@@ -816,6 +816,53 @@ var NESEmulator = (function (exports) {
          */
         getFlag(f) {
             return (this.status & f) > 0 ? 1 : 0;
+        }
+        
+        // Instruction tracing
+        enableTrace() {
+            this.traceEnabled = true;
+            this.trace = [];
+        }
+        
+        disableTrace() {
+            this.traceEnabled = false;
+        }
+        
+        getTrace() {
+            return this.trace.slice(); // Return copy of trace
+        }
+        
+        clearTrace() {
+            this.trace = [];
+        }
+        
+        addTraceEntry(opcode, addrData, cycles) {
+            if (!this.traceEnabled) return;
+            
+            const entry = {
+                pc: this.pc - (this.lookup[opcode].name === 'JSR' ? 2 : 1), // Adjust PC for JSR
+                opcode: opcode,
+                name: this.lookup[opcode].name,
+                addr: addrData.addr,
+                addrMode: this.lookup[opcode].addrMode.name,
+                a: this.a.toString(16).padStart(2, '0').toUpperCase(),
+                x: this.x.toString(16).padStart(2, '0').toUpperCase(),
+                y: this.y.toString(16).padStart(2, '0').toUpperCase(),
+                sp: this.stkp.toString(16).padStart(2, '0').toUpperCase(),
+                status: this.status.toString(16).padStart(2, '0').toUpperCase(),
+                cycles: cycles,
+                ppu: this.bus.ppu ? {
+                    scanline: this.bus.ppu.scanline,
+                    cycle: this.bus.ppu.cycle
+                } : null
+            };
+            
+            this.trace.push(entry);
+            
+            // Limit trace size to prevent memory issues
+            if (this.trace.length > 10000) {
+                this.trace = this.trace.slice(-5000);
+            }
         }
 
         /**
@@ -1311,9 +1358,14 @@ var NESEmulator = (function (exports) {
             // Clear OAM
             this.oam.fill(0);
             
-            // Clear palette with default values
+            // Initialize palette with default values
+            // Set up default palettes with grays for background and colors for sprites
             for (let i = 0; i < 32; i++) {
-                this.palette[i] = i % 4 === 0 ? 0x0F : (i - 1) % 4 + 1;
+                if (i % 4 === 0) {
+                    this.palette[i] = 0x0F; // Universal background color (black)
+                } else {
+                    this.palette[i] = (i - 1) % 4 + 1; // Simple color progression
+                }
             }
             
             // Clear screen buffer
@@ -1767,10 +1819,23 @@ var NESEmulator = (function (exports) {
         }
         
         getColorFromPalette(palette, index) {
+            // Palette memory layout according to PPU reference
+            // Background palettes: $3F00-$3F0F (4 palettes * 4 colors)
+            // Sprite palettes: $3F10-$3F1F (4 palettes * 4 colors)
+            // Note: $3F00, $3F04, $3F08, $3F0C, $3F10, $3F14, $3F18, $3F1C are mirrors
             if (palette === 0 && index === 0) {
                 return 0x0F; // Universal background color
             }
-            const addr = 0x3F00 + (palette * 4 + index);
+            
+            let addr;
+            if (palette < 4) {
+                // Background palettes
+                addr = 0x3F00 + palette * 4 + index;
+            } else {
+                // Sprite palettes
+                addr = 0x3F10 + (palette - 4) * 4 + index;
+            }
+            
             return this.ppuRead(addr) & 0x3F;
         }
         
@@ -3724,7 +3789,7 @@ CTRL: $${ppuStatus.control}  MASK: $${ppuStatus.mask}  STATUS: $${ppuStatus.stat
         
         const canvas = document.createElement('canvas');
         canvas.width = 512;
-        canvas.height = 512;
+        canvas.height = 640; // Taller to show palettes
         const ctx = canvas.getContext('2d');
         
         // Draw all pattern tiles from CHR ROM
@@ -3751,8 +3816,10 @@ CTRL: $${ppuStatus.control}  MASK: $${ppuStatus.mask}  STATUS: $${ppuStatus.stat
                             const bitMask = 1 << (7 - col);
                             const bit1Value = (bit1 & bitMask) ? 1 : 0;
                             const bit2Value = (bit2 & bitMask) ? 2 : 0;
-                            const colorIndex = bit1Value | bit2Value;
+                            const patternValue = bit1Value | bit2Value;
                             
+                            // Get color from palette 0 (background palette)
+                            const colorIndex = exports.nes.ppu.getColorFromPalette(0, patternValue);
                             const color = exports.nes.ppu.getNESColor(colorIndex);
                             
                             const x = table * 256 + tileX * tileSize + col;
@@ -3766,6 +3833,56 @@ CTRL: $${ppuStatus.control}  MASK: $${ppuStatus.mask}  STATUS: $${ppuStatus.stat
             }
         }
         
+        // Draw palette display below pattern tables
+        ctx.fillStyle = '#fff';
+        ctx.font = '14px monospace';
+        ctx.fillText('Current NES Palettes:', 10, 520);
+        
+        // Draw all 8 palettes
+        for (let palette = 0; palette < 8; palette++) {
+            // Label
+            ctx.fillText(`Palette ${palette}:`, 10 + palette * 180, 520);
+            
+            // Draw colors in this palette
+            for (let color = 0; color < 4; color++) {
+                const colorIndex = exports.nes.ppu.getColorFromPalette(palette, color);
+                const nesColor = exports.nes.ppu.getNESColor(colorIndex);
+                ctx.fillStyle = `rgb(${nesColor.r}, ${nesColor.g}, ${nesColor.b})`;
+                ctx.fillRect(10 + palette * 180 + color * 40, 540, 35, 18);
+                
+                // Add border for transparent color (index 0)
+                if (color === 0) {
+                    ctx.strokeStyle = '#666';
+                    ctx.strokeRect(10 + palette * 180 + color * 40, 540, 35, 18);
+                }
+            }
+        }
+        
+        // Draw palette display below pattern tables
+        ctx.fillStyle = '#fff';
+        ctx.font = '14px monospace';
+        ctx.fillText('Current NES Palettes:', 10, 520);
+        
+        // Draw all 8 palettes
+        for (let palette = 0; palette < 8; palette++) {
+            // Label
+            ctx.fillText(`Palette ${palette}:`, 10 + palette * 180, 520);
+            
+            // Draw colors in this palette
+            for (let color = 0; color < 4; color++) {
+                const colorIndex = exports.nes.ppu.getColorFromPalette(palette, color);
+                const nesColor = exports.nes.ppu.getNESColor(colorIndex);
+                ctx.fillStyle = `rgb(${nesColor.r}, ${nesColor.g}, ${nesColor.b})`;
+                ctx.fillRect(10 + palette * 180 + color * 40, 540, 35, 18);
+                
+                // Add border for transparent color (index 0)
+                if (color === 0) {
+                    ctx.strokeStyle = '#666';
+                    ctx.strokeRect(10 + palette * 180 + color * 40, 540, 35, 18);
+                }
+            }
+        }
+        
         // Create new window to display tiles
         const tileWindow = window.open('', '_blank');
         tileWindow.document.write(`
@@ -3773,6 +3890,8 @@ CTRL: $${ppuStatus.control}  MASK: $${ppuStatus.mask}  STATUS: $${ppuStatus.stat
         <head><title>Pattern Tables</title></head>
         <body style="margin:0; padding:20px; background:#222; color:#fff;">
             <h2>NES Pattern Tables</h2>
+            <p>Each tile shows 8x8 pixels using Palette 0 (background palette).</p>
+            <p>Bottom shows all 8 palettes with their 4 colors each.</p>
             <img src="${canvas.toDataURL()}" style="image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: -webkit-crisp-edges;">
         </body>
         </html>

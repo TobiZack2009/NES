@@ -550,7 +550,7 @@ function viewTiles() {
     
     const canvas = document.createElement('canvas');
     canvas.width = 512;
-    canvas.height = 512;
+    canvas.height = 640; // Taller to show palettes
     const ctx = canvas.getContext('2d');
     
     // Draw all pattern tiles from CHR ROM
@@ -577,8 +577,10 @@ function viewTiles() {
                         const bitMask = 1 << (7 - col);
                         const bit1Value = (bit1 & bitMask) ? 1 : 0;
                         const bit2Value = (bit2 & bitMask) ? 2 : 0;
-                        const colorIndex = bit1Value | bit2Value;
+                        const patternValue = bit1Value | bit2Value;
                         
+                        // Get color from palette 0 (background palette)
+                        const colorIndex = nes.ppu.getColorFromPalette(0, patternValue);
                         const color = nes.ppu.getNESColor(colorIndex);
                         
                         const x = table * 256 + tileX * tileSize + col;
@@ -592,6 +594,56 @@ function viewTiles() {
         }
     }
     
+    // Draw palette display below pattern tables
+    ctx.fillStyle = '#fff';
+    ctx.font = '14px monospace';
+    ctx.fillText('Current NES Palettes:', 10, 520);
+    
+    // Draw all 8 palettes
+    for (let palette = 0; palette < 8; palette++) {
+        // Label
+        ctx.fillText(`Palette ${palette}:`, 10 + palette * 180, 520);
+        
+        // Draw colors in this palette
+        for (let color = 0; color < 4; color++) {
+            const colorIndex = nes.ppu.getColorFromPalette(palette, color);
+            const nesColor = nes.ppu.getNESColor(colorIndex);
+            ctx.fillStyle = `rgb(${nesColor.r}, ${nesColor.g}, ${nesColor.b})`;
+            ctx.fillRect(10 + palette * 180 + color * 40, 540, 35, 18);
+            
+            // Add border for transparent color (index 0)
+            if (color === 0) {
+                ctx.strokeStyle = '#666';
+                ctx.strokeRect(10 + palette * 180 + color * 40, 540, 35, 18);
+            }
+        }
+    }
+    
+    // Draw palette display below pattern tables
+    ctx.fillStyle = '#fff';
+    ctx.font = '14px monospace';
+    ctx.fillText('Current NES Palettes:', 10, 520);
+    
+    // Draw all 8 palettes
+    for (let palette = 0; palette < 8; palette++) {
+        // Label
+        ctx.fillText(`Palette ${palette}:`, 10 + palette * 180, 520);
+        
+        // Draw colors in this palette
+        for (let color = 0; color < 4; color++) {
+            const colorIndex = nes.ppu.getColorFromPalette(palette, color);
+            const nesColor = nes.ppu.getNESColor(colorIndex);
+            ctx.fillStyle = `rgb(${nesColor.r}, ${nesColor.g}, ${nesColor.b})`;
+            ctx.fillRect(10 + palette * 180 + color * 40, 540, 35, 18);
+            
+            // Add border for transparent color (index 0)
+            if (color === 0) {
+                ctx.strokeStyle = '#666';
+                ctx.strokeRect(10 + palette * 180 + color * 40, 540, 35, 18);
+            }
+        }
+    }
+    
     // Create new window to display tiles
     const tileWindow = window.open('', '_blank');
     tileWindow.document.write(`
@@ -599,6 +651,8 @@ function viewTiles() {
         <head><title>Pattern Tables</title></head>
         <body style="margin:0; padding:20px; background:#222; color:#fff;">
             <h2>NES Pattern Tables</h2>
+            <p>Each tile shows 8x8 pixels using Palette 0 (background palette).</p>
+            <p>Bottom shows all 8 palettes with their 4 colors each.</p>
             <img src="${canvas.toDataURL()}" style="image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: -webkit-crisp-edges;">
         </body>
         </html>
