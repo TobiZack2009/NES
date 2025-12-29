@@ -100,7 +100,7 @@ export class NES {
         const output = [];
         let addr = startAddr;
         
-        while (addr <= endAddr && output.length < 100) {
+        while (addr <= endAddr) {
             const result = disassembleInstruction(this.bus, addr);
             const instruction = `${result.mnemonic} ${result.operand}`;
             output.push({ addr: result.addr, instruction });

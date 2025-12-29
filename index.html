@@ -32,6 +32,7 @@
             display: flex;
             flex-direction: column;
             height: calc(100vh - 48px);
+            box-sizing: border-box;
         }
 
         main {
@@ -142,6 +143,7 @@
             display: flex;
             border-bottom: 1px solid var(--border-color);
             padding: 0 16px;
+            flex-wrap: wrap;
         }
 
         .tab-button {
@@ -173,10 +175,14 @@
         pre {
             font-family: var(--font-mono);
             font-size: 13px;
-            white-space: pre-wrap;
+            white-space: pre;
             margin: 0;
             color: var(--text-primary);
             line-height: 1.6;
+        }
+        
+        #disassembly-output {
+             white-space: pre-wrap;
         }
         
         .highlight {
@@ -226,6 +232,47 @@
             font-weight: bold;
         }
         
+        /* Palette View */
+        .palette-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 16px;
+        }
+        .palette-group {
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 8px;
+        }
+        .palette-colors {
+            display: flex;
+            gap: 4px;
+            margin-top: 8px;
+        }
+        .color-swatch {
+            width: 24px;
+            height: 24px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        #pattern-canvas {
+            image-rendering: pixelated;
+            width: 512px;
+            height: 256px;
+            border: 1px solid var(--border-color);
+        }
+
+        /* Responsive Layout */
+        @media (max-width: 960px) {
+            main {
+                grid-template-columns: 1fr;
+            }
+            #canvas {
+                width: 100%;
+                max-width: 512px;
+                height: auto;
+            }
+        }
+        
     </style>
 </head>
 <body>
@@ -250,6 +297,9 @@
                 <button class="tab-button active" data-tab="cpu-state">CPU State</button>
                 <button class="tab-button" data-tab="disassembly">Disassembly</button>
                 <button class="tab-button" data-tab="instruction-log">Instruction Log</button>
+                <button class="tab-button" data-tab="memory">Memory</button>
+                <button class="tab-button" data-tab="palettes">Palettes</button>
+                <button class="tab-button" data-tab="patterns">Patterns</button>
             </div>
             
             <div id="cpu-state" class="tab-content active panel-body">
@@ -276,6 +326,31 @@
             <div id="instruction-log" class="tab-content panel-body">
                 <pre id="instruction-log-output">Execute instructions to see log.</pre>
             </div>
+
+            <div id="memory" class="tab-content panel-body">
+                <pre id="memory-output">Load a ROM to see memory.</pre>
+            </div>
+            
+            <div id="palettes" class="tab-content panel-body">
+                <div id="palette-output">Load a ROM to see palettes.</div>
+            </div>
+            
+            <div id="patterns" class="tab-content panel-body">
+                <div style="margin-bottom: 8px;">
+                    <label for="pattern-palette-selector">View with Palette: </label>
+                    <select id="pattern-palette-selector">
+                        <option value="0">BG 0</option>
+                        <option value="1">BG 1</option>
+                        <option value="2">BG 2</option>
+                        <option value="3">BG 3</option>
+                        <option value="4">Sprite 0</option>
+                        <option value="5">Sprite 1</option>
+                        <option value="6">Sprite 2</option>
+                        <option value="7">Sprite 3</option>
+                    </select>
+                </div>
+                <canvas id="pattern-canvas" width="256" height="128"></canvas>
+            </div>
         </div>
     </main>
     
@@ -284,6 +359,7 @@
 
         let animationFrameId = null;
         let isRunning = false;
+        let lastPc = 0;
         
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
@@ -300,6 +376,11 @@
         const flagsTable = document.getElementById('flags-table');
         const disassemblyOutput = document.getElementById('disassembly-output');
         const instructionLogOutput = document.getElementById('instruction-log-output');
+        const memoryOutput = document.getElementById('memory-output');
+        const paletteOutput = document.getElementById('palette-output');
+        const patternCanvas = document.getElementById('pattern-canvas');
+        const patternCtx = patternCanvas.getContext('2d');
+        const paletteSelector = document.getElementById('pattern-palette-selector');
 
         function updateUIState() {
             runBtn.disabled = isRunning || !nes.cartridge;
@@ -309,7 +390,7 @@
         }
 
         function renderScreen() {
-            if (!nes.ppu) return; // Prevent error before PPU is initialized
+            if (!nes.ppu) return;
             const buffer = nes.ppu.getScreenBuffer();
             for (let i = 0; i < buffer.length; i++) {
                 imageData.data[i] = buffer[i];
@@ -317,20 +398,105 @@
             ctx.putImageData(imageData, 0, 0);
         }
 
+        function generateFullDisassembly() {
+            if (!nes.cartridge) return;
+            const fullDisassembly = nes.disassemble(0x8000, 0xFFFF);
+            
+            disassemblyOutput.innerHTML = fullDisassembly.map(d => {
+                const addrHex = d.addr.toString(16).toUpperCase().padStart(4, '0');
+                const line = `0x${addrHex}: ${d.instruction}`;
+                return `<div id="inst-${addrHex}">${line}</div>`;
+            }).join('');
+        }
+        
+        function updateMemoryView() {
+            if (!nes.bus) return;
+            let output = 'Zero Page ($0000 - $00FF):\n';
+            for (let row = 0; row < 16; row++) {
+                const addr = row * 16;
+                let line = `0x${addr.toString(16).padStart(4, '0')}: `;
+                for (let col = 0; col < 16; col++) {
+                    line += nes.bus.read(addr + col).toString(16).toUpperCase().padStart(2, '0') + ' ';
+                }
+                output += line + '\n';
+            }
+            memoryOutput.textContent = output;
+        }
+
+        function updatePaletteView() {
+            if (!nes.ppu) return;
+            let html = '<h4>Background Palettes</h4><div class="palette-grid">';
+
+            for (let i = 0; i < 4; i++) {
+                html += `<div class="palette-group">Palette ${i}<div class="palette-colors">`;
+                for (let j = 0; j < 4; j++) {
+                    const colorIndex = nes.ppu.ppuRead(0x3F00 + i * 4 + j);
+                    const color = nes.ppu.getNESColor(colorIndex);
+                    html += `<div class="color-swatch" style="background-color: rgb(${color.r}, ${color.g}, ${color.b})"></div>`;
+                }
+                html += '</div></div>';
+            }
+            html += '</div><h4>Sprite Palettes</h4><div class="palette-grid">';
+            for (let i = 0; i < 4; i++) {
+                html += `<div class="palette-group">Palette ${i+4}<div class="palette-colors">`;
+                for (let j = 0; j < 4; j++) {
+                    const colorIndex = nes.ppu.ppuRead(0x3F10 + i * 4 + j);
+                    const color = nes.ppu.getNESColor(colorIndex);
+                    html += `<div class="color-swatch" style="background-color: rgb(${color.r}, ${color.g}, ${color.b})"></div>`;
+                }
+                html += '</div></div>';
+            }
+            html += '</div>';
+            paletteOutput.innerHTML = html;
+        }
+
+        function updatePatternTableView() {
+            if (!nes.ppu) return;
+            const selectedPalette = parseInt(paletteSelector.value);
+
+            const drawTable = (tableIndex, startX) => {
+                for (let tileY = 0; tileY < 16; tileY++) {
+                    for (let tileX = 0; tileX < 16; tileX++) {
+                        const tileAddr = tableIndex * 0x1000 + (tileY * 16 + tileX) * 16;
+                        for (let row = 0; row < 8; row++) {
+                            const plane1 = nes.ppu.ppuRead(tileAddr + row);
+                            const plane2 = nes.ppu.ppuRead(tileAddr + row + 8);
+                            for (let col = 0; col < 8; col++) {
+                                const pixel = ((plane1 >> (7 - col)) & 1) | (((plane2 >> (7 - col)) & 1) << 1);
+                                
+                                const paletteBase = selectedPalette < 4 ? 0x3F00 : 0x3F10;
+                                const paletteNumInGroup = selectedPalette % 4;
+                                let colorAddr = paletteBase + paletteNumInGroup * 4 + pixel;
+                                if (pixel === 0) colorAddr = 0x3F00; // Universal background
+
+                                const colorIndex = nes.ppu.ppuRead(colorAddr);
+                                const color = nes.ppu.getNESColor(colorIndex);
+                                patternCtx.fillStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
+                                patternCtx.fillRect(startX + tileX * 8 + col, tileY * 8 + row, 1, 1);
+                            }
+                        }
+                    }
+                }
+            };
+            
+            drawTable(0, 0);   
+            drawTable(1, 128); 
+        }
+
         function updateDebugInfo() {
             if (!nes.cpu) return;
 
-            // Update Registers
             const cpu = nes.cpu;
+            const ppu = nes.ppu;
             registersTable.innerHTML = `
                 <tr><td class="label">PC:</td><td>0x${cpu.pc.toString(16).toUpperCase().padStart(4, '0')}</td></tr>
                 <tr><td class="label">A:</td><td>0x${cpu.a.toString(16).toUpperCase().padStart(2, '0')}</td></tr>
                 <tr><td class="label">X:</td><td>0x${cpu.x.toString(16).toUpperCase().padStart(2, '0')}</td></tr>
                 <tr><td class="label">Y:</td><td>0x${cpu.y.toString(16).toUpperCase().padStart(2, '0')}</td></tr>
                 <tr><td class="label">SP:</td><td>0x${cpu.stkp.toString(16).toUpperCase().padStart(2, '0')}</td></tr>
+                ${ppu ? `<tr><td class="label">Scroll:</td><td>${ppu.scrollX}, ${ppu.scrollY}</td></tr>` : ''}
             `;
 
-            // Update Flags
             const flags = [
                 { key: 'N', val: cpu.getFlag(FLAGS.N) }, { key: 'V', val: cpu.getFlag(FLAGS.V) },
                 { key: 'U', val: cpu.getFlag(FLAGS.U) }, { key: 'B', val: cpu.getFlag(FLAGS.B) },
@@ -341,21 +507,45 @@
                 <tr>${flags.map(f => `<td class="${f.val ? 'flag-active' : 'flag-inactive'}">${f.val}</td>`).join('')}</tr>
             `;
             
-            // Update Disassembly
-            const disassembly = nes.disassemble(cpu.pc - 10, cpu.pc + 10);
-            disassemblyOutput.innerHTML = disassembly.map(d => {
-                const line = `0x${d.addr.toString(16).toUpperCase().padStart(4, '0')}: ${d.instruction}`;
-                return (d.addr === cpu.pc) ? `<span class="current-instruction">${line}</span>` : line;
-            }).join('\n');
+            if (cpu.pc !== lastPc) {
+                if (lastPc !== 0) {
+                    const prevInst = document.getElementById(`inst-${lastPc.toString(16).toUpperCase().padStart(4, '0')}`);
+                    if (prevInst) prevInst.classList.remove('current-instruction');
+                }
+                
+                const currentInst = document.getElementById(`inst-${cpu.pc.toString(16).toUpperCase().padStart(4, '0')}`);
+                if (currentInst) {
+                    currentInst.classList.add('current-instruction');
+                    const rect = currentInst.getBoundingClientRect();
+                    const parentRect = disassemblyOutput.getBoundingClientRect();
+                    if (rect.top < parentRect.top || rect.bottom > parentRect.bottom) {
+                         currentInst.scrollIntoView({ block: 'center', behavior: 'auto' });
+                    }
+                }
+                lastPc = cpu.pc;
+            }
 
-            // Update Instruction Log
             const log = nes.getInstructionLog();
             instructionLogOutput.textContent = log.join('\n');
+            instructionLogOutput.scrollTop = instructionLogOutput.scrollHeight;
+
+            if (document.getElementById('memory').classList.contains('active')) updateMemoryView();
+            if (document.getElementById('palettes').classList.contains('active')) updatePaletteView();
+            if (document.getElementById('patterns').classList.contains('active')) updatePatternTableView();
         }
 
         function run() {
             if (!isRunning) return;
-            nes.clock();
+
+            if (nes.ppu) {
+                const targetFrame = nes.ppu.frame + 1;
+                while(nes.ppu.frame < targetFrame) {
+                    nes.clock();
+                }
+            } else {
+                for(let i = 0; i < 30000; i++) nes.clock();
+            }
+
             renderScreen();
             updateDebugInfo();
             animationFrameId = requestAnimationFrame(run);
@@ -372,17 +562,17 @@
 
         stopBtn.addEventListener('click', () => {
             isRunning = false;
-            if (animationFrameId) {
-                cancelAnimationFrame(animationFrameId);
-            }
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
             statusEl.textContent = "Emulator stopped.";
             updateUIState();
-            updateDebugInfo(); // Final update
+            updateDebugInfo();
         });
 
         stepBtn.addEventListener('click', () => {
             if (!isRunning && nes.cartridge) {
-                nes.clock();
+                do {
+                    nes.clock();
+                } while (nes.cpu.cycles > 0);
                 renderScreen();
                 updateDebugInfo();
             }
@@ -391,6 +581,8 @@
         resetBtn.addEventListener('click', () => {
             if (nes.cartridge) {
                 nes.reset();
+                lastPc = 0;
+                generateFullDisassembly();
                 renderScreen();
                 updateDebugInfo();
                 statusEl.textContent = "Emulator reset.";
@@ -406,17 +598,22 @@
                     statusEl.textContent = `${file.name} loaded successfully.`;
                     isRunning = false;
                     if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                    
+                    lastPc = 0;
+                    generateFullDisassembly();
                     nes.reset();
+
                     updateUIState();
                     renderScreen();
                     updateDebugInfo();
                 } else {
                     statusEl.textContent = `Error: Failed to load ${file.name}.`;
+                    disassemblyOutput.textContent = 'Load a ROM to see disassembly.';
+                    memoryOutput.textContent = 'Load a ROM to see memory.';
                 }
             }
         });
 
-        // Tab switching logic
         const tabs = document.querySelector('.tabs');
         const tabContents = document.querySelectorAll('.tab-content');
         tabs.addEventListener('click', (e) => {
@@ -424,7 +621,7 @@
                 const tabId = e.target.dataset.tab;
 
                 tabs.querySelector('.active').classList.remove('active');
-e.target.classList.add('active');
+                e.target.classList.add('active');
 
                 tabContents.forEach(content => {
                     content.classList.remove('active');
@@ -432,28 +629,28 @@ e.target.classList.add('active');
                         content.classList.add('active');
                     }
                 });
+                
+                if (tabId === 'memory') updateMemoryView();
+                if (tabId === 'palettes') updatePaletteView();
+                if (tabId === 'patterns') updatePatternTableView();
             }
         });
+        
+        paletteSelector.addEventListener('change', updatePatternTableView);
 
-        // Keyboard controller input
         const keyMap = {
-            'KeyJ': 'A', 'KeyK': 'B', 'ShiftRight': 'SELECT', 'Enter': 'START',
-            'KeyW': 'UP', 'KeyS': 'DOWN', 'KeyA': 'LEFT', 'KeyD': 'RIGHT',
+            'KeyX': 'A', 'KeyZ': 'B', 'ShiftRight': 'SELECT', 'Enter': 'START',
+            'ArrowUp': 'UP', 'ArrowDown': 'DOWN', 'ArrowLeft': 'LEFT', 'ArrowRight': 'RIGHT',
         };
 
         document.addEventListener('keydown', (e) => {
-            if (keyMap[e.code]) {
-                controller.setButtonState(keyMap[e.code], true);
-            }
+            if (keyMap[e.code]) controller.setButtonState(keyMap[e.code], true);
         });
 
         document.addEventListener('keyup', (e) => {
-            if (keyMap[e.code]) {
-                controller.setButtonState(keyMap[e.code], false);
-            }
+            if (keyMap[e.code]) controller.setButtonState(keyMap[e.code], false);
         });
 
-        // Initial state
         updateUIState();
         renderScreen();
         updateDebugInfo();

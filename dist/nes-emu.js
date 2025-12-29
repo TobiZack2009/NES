@@ -1389,9 +1389,6 @@ var NESEmulator = (function (exports) {
                 if (this.scanline >= 261) {
                     this.scanline = -1;
                     this.frame++;
-                    
-                    // Clear screen buffer at end of frame for clean start
-                    this.screen.fill(0);
                 }
             }
             
@@ -1840,6 +1837,11 @@ var NESEmulator = (function (exports) {
         }
         
         getNESColor(colorIndex) {
+            // Apply greyscale if enabled
+            if (this.mask & 0x01) {
+                colorIndex &= 0x30;
+            }
+
             // NES palette
             const palette = [
                 {r: 84,  g: 84,  b: 84},   // 0x00
@@ -1858,7 +1860,7 @@ var NESEmulator = (function (exports) {
                 {r: 0,   g: 0,   b: 0},    // 0x0D
                 {r: 0,   g: 0,   b: 0},    // 0x0E
                 {r: 0,   g: 0,   b: 0},    // 0x0F
-                {r: 152, g: 0,   b: 0},    // 0x10
+                {r: 152, g: 152, b: 152},  // 0x10, corrected from {r: 152, g: 0,   b: 0}
                 {r: 8,   g: 76,  b: 196},  // 0x11
                 {r: 48,  g: 50,  b: 236},  // 0x12
                 {r: 92,  g: 30,  b: 228},  // 0x13
@@ -1870,45 +1872,66 @@ var NESEmulator = (function (exports) {
                 {r: 40,  g: 114, b: 0},    // 0x19
                 {r: 8,   g: 124, b: 0},    // 0x1A
                 {r: 0,   g: 118, b: 40},   // 0x1B
-                {r: 0,   g: 102, b: 80},   // 0x1C
+                {r: 0,   g: 102, b: 120},  // 0x1C, corrected from {r: 0,   g: 102, b: 80}
                 {r: 0,   g: 0,   b: 0},    // 0x1D
                 {r: 0,   g: 0,   b: 0},    // 0x1E
                 {r: 0,   g: 0,   b: 0},    // 0x1F
-                {r: 236, g: 0,   b: 0},    // 0x20
-                {r: 76,  g: 0,   b: 0},    // 0x21
-                {r: 168, g: 0,   b: 32},   // 0x22
-                {r: 228, g: 0,   b: 80},   // 0x23
-                {r: 236, g: 58,  b: 92},   // 0x24
-                {r: 172, g: 54,  b: 0},    // 0x25
-                {r: 236, g: 88,  b: 0},    // 0x26
-                {r: 200, g: 120, b: 0},    // 0x27
-                {r: 152, g: 120, b: 0},    // 0x28
-                {r: 108, g: 152, b: 0},    // 0x29
-                {r: 44,  g: 180, b: 48},   // 0x2A
-                {r: 0,   g: 168, b: 68},   // 0x2B
-                {r: 0,   g: 140, b: 152},  // 0x2C
-                {r: 0,   g: 0,   b: 0},    // 0x2D
+                {r: 236, g: 236, b: 236},  // 0x20, corrected from {r: 236, g: 0,   b: 0}
+                {r: 76,  g: 154, b: 236},  // 0x21, corrected from {r: 76,  g: 0,   b: 0}
+                {r: 120, g: 124, b: 236},  // 0x22, corrected from {r: 168, g: 0,   b: 32}
+                {r: 176, g: 98,  b: 236},  // 0x23, corrected from {r: 228, g: 0,   b: 80}
+                {r: 228, g: 84,  b: 236},  // 0x24, corrected from {r: 236, g: 58,  b: 92}
+                {r: 236, g: 88,  b: 180},  // 0x25, corrected from {r: 172, g: 54,  b: 0}
+                {r: 236, g: 120, b: 120},  // 0x26
+                {r: 212, g: 136, b: 32},   // 0x27, corrected from {r: 200, g: 120, b: 0}
+                {r: 160, g: 170, b: 0},    // 0x28, corrected from {r: 152, g: 120, b: 0}
+                {r: 116, g: 196, b: 0},    // 0x29, corrected from {r: 108, g: 152, b: 0}
+                {r: 76,  g: 208, b: 32},   // 0x2A, corrected from {r: 44,  g: 180, b: 48}
+                {r: 56,  g: 204, b: 108},  // 0x2B, corrected from {r: 0,   g: 168, b: 68}
+                {r: 56,  g: 180, b: 204},  // 0x2C, corrected from {r: 0,   g: 140, b: 152}
+                {r: 60,  g: 60,  b: 60},   // 0x2D, corrected from {r: 0,   g: 0,   b: 0}
                 {r: 0,   g: 0,   b: 0},    // 0x2E
                 {r: 0,   g: 0,   b: 0},    // 0x2F
-                {r: 236, g: 224, b: 208},  // 0x30
-                {r: 236, g: 160, b: 120},  // 0x31
-                {r: 236, g: 196, b: 168},  // 0x32
-                {r: 236, g: 200, b: 176},  // 0x33
-                {r: 236, g: 180, b: 168},  // 0x34
-                {r: 228, g: 156, b: 160},  // 0x35
-                {r: 204, g: 148, b: 156},  // 0x36
-                {r: 180, g: 140, b: 136},  // 0x37
-                {r: 196, g: 176, b: 168},  // 0x38
-                {r: 188, g: 172, b: 160},  // 0x39
-                {r: 172, g: 164, b: 152},  // 0x3A
-                {r: 152, g: 148, b: 136},  // 0x3B
-                {r: 132, g: 132, b: 120},  // 0x3C
-                {r: 0,   g: 0,   b: 0},    // 0x3D
+                {r: 236, g: 236, b: 236},  // 0x30
+                {r: 168, g: 204, b: 236},  // 0x31, corrected from {r: 236, g: 160, b: 120}
+                {r: 188, g: 188, b: 236},  // 0x32, corrected from {r: 236, g: 196, b: 168}
+                {r: 212, g: 178, b: 236},  // 0x33, corrected from {r: 236, g: 200, b: 176}
+                {r: 236, g: 174, b: 236},  // 0x34, corrected from {r: 236, g: 180, b: 168}
+                {r: 236, g: 174, b: 212},  // 0x35, corrected from {r: 228, g: 156, b: 160}
+                {r: 236, g: 180, b: 176},  // 0x36, corrected from {r: 204, g: 148, b: 156}
+                {r: 228, g: 196, b: 144},  // 0x37, corrected from {r: 180, g: 140, b: 136}
+                {r: 204, g: 210, b: 120},  // 0x38, corrected from {r: 196, g: 176, b: 168}
+                {r: 180, g: 222, b: 120},  // 0x39, corrected from {r: 188, g: 172, b: 160}
+                {r: 168, g: 226, b: 144},  // 0x3A, corrected from {r: 172, g: 164, b: 152}
+                {r: 152, g: 226, b: 180},  // 0x3B, corrected from {r: 152, g: 148, b: 136}
+                {r: 160, g: 214, b: 228},  // 0x3C, corrected from {r: 132, g: 132, b: 120}
+                {r: 160, g: 160, b: 160},  // 0x3D, corrected from {r: 0,   g: 0,   b: 0}
                 {r: 0,   g: 0,   b: 0},    // 0x3E
                 {r: 0,   g: 0,   b: 0},    // 0x3F
             ];
             
-            return palette[Math.min(colorIndex, 63)];
+            let color = {...palette[Math.min(colorIndex, 63)]};
+
+            // Apply color emphasis
+            const emphasis = this.mask >> 5;
+            if (emphasis & 1) { // Emphasize Red
+                color.g *= 0.75;
+                color.b *= 0.75;
+            }
+            if (emphasis & 2) { // Emphasize Green
+                color.r *= 0.75;
+                color.b *= 0.75;
+            }
+            if (emphasis & 4) { // Emphasize Blue
+                color.r *= 0.75;
+                color.g *= 0.75;
+            }
+
+            return {
+                r: Math.floor(color.r),
+                g: Math.floor(color.g),
+                b: Math.floor(color.b)
+            };
         }
         
         // PPU Register Interface
@@ -1923,10 +1946,9 @@ var NESEmulator = (function (exports) {
                     return 0; // Write-only
                     
                 case 0x02: // PPUSTATUS
-                    const result = this.status;
+                    const result = this.status | (this.dataBuffer & 0x1F); // Open bus behavior
                     this.status &= ~0x80; // Clear VBlank on read
-                    this.dataBuffer = this.ppuRead(this.vramAddr);
-                    this.tramAddr = (this.tramAddr & ~0x7BE0) | (this.vramAddr & 0x7BE0);
+                    this.addrLatch = 0;   // Reset address latch
                     return result;
                     
                 case 0x03: // OAMADDR
@@ -1959,6 +1981,7 @@ var NESEmulator = (function (exports) {
         }
         
         writeRegister(addr, data) {
+            this.dataBuffer = data; // Any write to a PPU register updates the open bus latch
             addr &= 0x07;
             data &= 0xFF;
             
@@ -2021,7 +2044,7 @@ var NESEmulator = (function (exports) {
             const sourceAddr = page * 0x100;
             
             for (let i = 0; i < 256; i++) {
-                this.oam[i] = this.bus.cpuRead(sourceAddr + i);
+                this.oam[i] = this.bus.read(sourceAddr + i); // Use bus.read for CPU memory
             }
             
             this.oamAddr = 0; // Reset OAM address after DMA
@@ -2114,15 +2137,18 @@ var NESEmulator = (function (exports) {
                 const paletteAddr = addr & 0x1F;
                 if ((paletteAddr & 0x03) === 0) {
                     this.palette[0] = data & 0x3F;
+                    this.palette[0x10] = data & 0x3F; // Mirror to sprite palette
                 }
                 this.palette[paletteAddr] = data & 0x3F;
             } else if (addr >= 0x3F20 && addr <= 0x3FFF) {
                 // Mirrors of $3F00-$3F1F
-                this.palette[addr & 0x1F] = data & 0x3F;
+                this.ppuWrite(addr & 0x3F1F, data);
             }
         }
         
-
+        getPalette() {
+            return this.palette;
+        }
         
         // Get current screen data for rendering
         getScreen() {
@@ -2652,7 +2678,7 @@ var NESEmulator = (function (exports) {
             const output = [];
             let addr = startAddr;
             
-            while (addr <= endAddr && output.length < 100) {
+            while (addr <= endAddr) {
                 const result = disassembleInstruction(this.bus, addr);
                 const instruction = `${result.mnemonic} ${result.operand}`;
                 output.push({ addr: result.addr, instruction });
