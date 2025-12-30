@@ -77,7 +77,7 @@ export class PPU {
         this.cartridge = cartridge;
     }
     
-    reset() {
+reset() {
         this.addrLatch = 0;
         this.fineX = 0;
         this.control = 0x00;
@@ -142,7 +142,7 @@ export class PPU {
     }
     
     // PPU Internal Helper Functions
-    // These functions implement "Loopy" PPU scroll/address update logic
+    // These functions implement the "Loopy" PPU scroll/address update logic
 
     incrementScrollX() {
         if (!((this.mask >> 3) & 1 || (this.mask >> 4) & 1)) return; // No rendering
@@ -193,7 +193,7 @@ export class PPU {
         this.bgShifterAttribHi = (this.bgShifterAttribHi & 0xFF00) | ((this.bgNextTileAttr & 2) ? 0xFF : 0x00);
     }
 
-    // Main clock function, called by Bus
+    // Main clock function, called by the Bus
     clock() {
         // Update power-up state
         if (!this.canWriteRegisters) {
@@ -379,7 +379,7 @@ export class PPU {
         let spriteZeroHit = false;
 
         if (this.mask & 0x10) { // Sprite rendering enabled
-            // Find first non-transparent sprite pixel at this x position
+            // Find the first non-transparent sprite pixel at this x position
             for (let i = 0; i < this.spriteScanline.length; i++) {
                 const spriteData = this.getSpritePixel(i, x);
                 
@@ -456,10 +456,10 @@ export class PPU {
         const addrOffset = 0x23C0 | (this.addr & 0x0C00) | ((this.addr >> 4) & 0x38) | ((this.addr >> 2) & 0x07);
         this.bgNextTileAttr = this.ppuRead(addrOffset);
         
-        // Select relevant 2-bit attribute palette based on coarse X/Y
+        // Select the relevant 2-bit attribute palette based on coarse X/Y
         if ((this.addr >> 5) & 1) this.bgNextTileAttr >>= 4; // Use bits 4-7 for lower half of 16x16 block
         if ((this.addr >> 1) & 1) this.bgNextTileAttr >>= 2; // Use bits 2-3 or 6-7 for right half of 16x16 block
-        this.bgNextTileAttr &= 0x03; // Mask to get 2 bits
+        this.bgNextTileAttr &= 0x03; // Mask to get the 2 bits
     }
     
     fetchTileBitmapLow() {
@@ -492,7 +492,7 @@ export class PPU {
             if (this.spriteEvaluationIndex < 64) {
                 const oamEntryY = this.oam[this.spriteEvaluationIndex * 4];
                 
-                // Check if sprite is on next scanline
+                // Check if sprite is on the next scanline
                 if (this.scanline + 1 >= oamEntryY && this.scanline + 1 < oamEntryY + spriteHeight) {
                     if (this.foundSprites < 8) {
                         // Copy to secondary OAM
@@ -534,7 +534,7 @@ export class PPU {
             }
         } else if (cycleOffset >= 64) {
             // Copy secondary OAM back to primary OAM (cycles 65-320)
-            // This is where OAMADDR gets set to 9th sprite index
+            // This is where OAMADDR gets set to the 9th sprite index
             if (this.spriteOverflowIndex >= 0) {
                 this.oamAddr = this.spriteOverflowIndex;
             }
@@ -586,6 +586,49 @@ export class PPU {
         }
     }
     
+    // Legacy method - kept for compatibility
+    fetchSpritePatterns() {
+        const spriteHeight = (this.control & 0x20) ? 16 : 8;
+        const patternTable = (this.control & 0x08) ? 0x1000 : 0x0000;
+        
+        // Clear previous sprite pattern data
+        this.spritePatterns.fill(0);
+        this.spritePositions.fill(0);
+        this.spritePriorities.fill(0);
+        this.spritePalettes.fill(0);
+        
+        // For each sprite on this scanline, fetch its pattern data
+        for (let i = 0; i < this.spriteScanline.length; i++) {
+            const sprite = this.spriteScanline[i];
+            
+            // Calculate which tile line to fetch from sprite
+            let tileY = this.scanline - sprite.y;
+            if (sprite.vFlip) {
+                tileY = spriteHeight - 1 - tileY;
+            }
+            
+            let patternAddr;
+            if (spriteHeight === 16) {
+                const table = sprite.id & 1 ? 0x1000 : 0x0000;
+                const tileIndex = (sprite.id & 0xFE) | (tileY >= 8 ? 1 : 0);
+                patternAddr = table + (tileIndex << 4) + ((tileY & 7) << 1);
+            } else {
+                patternAddr = patternTable + (sprite.id << 4) + ((tileY & 7) << 1);
+            }
+            
+            const patternLow = this.ppuRead(patternAddr);
+            const patternHigh = this.ppuRead(patternAddr + 1);
+            
+            this.spritePatterns[i * 2] = patternLow;
+            this.spritePatterns[i * 2 + 1] = patternHigh;
+            this.spritePositions[i] = sprite.x;
+            this.spritePriorities[i] = sprite.priority;
+            this.spritePalettes[i] = sprite.palette;
+            this.spritePatterns[i * 2 + 8] = sprite.hFlip;
+            this.spritePatterns[i * 2 + 9] = sprite.oamIndex;
+        }
+    }
+    
     getSpritePixel(spriteIndex, x) {
         const spriteX = this.spritePositions[spriteIndex];
         if (x < spriteX || x >= spriteX + 8) {
@@ -621,7 +664,7 @@ export class PPU {
         return this.ppuRead(addr);
     }
     
-    getNESColor(colorIndex) {
+getNESColor(colorIndex) {
         if (this.mask & 0x01) { // Greyscale mode
             colorIndex &= 0x30;
         }
@@ -638,11 +681,11 @@ export class PPU {
             {r: 32,  g: 42,  b: 0},    {r: 8,   g: 58,  b: 0},    {r: 0,   g: 64,  b: 0},    {r: 0,   g: 60,  b: 0},
             {r: 0,   g: 50,  b: 60},   {r: 0,   g: 0,   b: 0},    {r: 0,   g: 0,   b: 0},    {r: 0,   g: 0,   b: 0},
             {r: 152, g: 152, b: 152},  {r: 8,   g: 76,  b: 196},  {r: 48,  g: 50,  b: 236},  {r: 92,  g: 30,  b: 228},
-            {r: 136, g: 20,  b: 176},  {r: 160,  g: 20,  b: 100},  {r: 152,  g: 34,  b: 32},   {r: 120,  g: 60,  b: 0},
+            {r: 136, g: 20,  b: 176},  {r: 160,  g: 20,  b: 100},  {r: 152,  g: 34,  b: 32},   {r: 120, g: 60,  b: 0},
             {r: 84,  g: 90,  b: 0},    {r: 40,  g: 114, b: 0},    {r: 8,   g: 124, b: 0},    {r: 0,   g: 118, b: 40},
             {r: 0,   g: 102, b: 120},  {r: 0,   g: 0,   b: 0},    {r: 0,   g: 0,   b: 0},    {r: 0,   g: 0,   b: 0},
-            {r: 236, g: 236, b: 236},  {r: 76,  g: 154, b: 236},  {r: 120, g: 124, b: 236},  {r: 176,  g: 98,  b: 236},
-            {r: 228, g: 84,  b: 236},  {r: 236,  g: 88,  b: 180},  {r: 236,  g: 120, b: 120},  {r: 212,  g: 136, b: 32},
+            {r: 236, g: 236, b: 236},  {r: 76,  g: 154, b: 236},  {r: 120, g: 124, b: 236},  {r: 176, g: 98,  b: 236},
+            {r: 228, g: 84,  b: 236},  {r: 236,  g: 88,  b: 180},  {r: 236, g: 120, b: 120},  {r: 212, g: 136, b: 32},
             {r: 160, g: 170, b: 0},    {r: 116, g: 196, b: 0},    {r: 76,  g: 208, b: 32},   {r: 56,  g: 204, b: 108},
             {r: 56,  g: 180, b: 204},  {r: 60,  g: 60,  b: 60},    {r: 0,   g: 0,   b: 0},    {r: 0,   g: 0,   b: 0},
             {r: 236, g: 236, b: 236},  {r: 168, g: 204, b: 236},  {r: 188, g: 188, b: 236},  {r: 212, g: 178, b: 236},
@@ -651,8 +694,7 @@ export class PPU {
             {r: 160, g: 214, b: 228},  {r: 160, g: 160, b: 160},  {r: 0,   g: 0,   b: 0},    {r: 0,   g: 0,   b: 0},
         ];
         
-        let color = palette[Math.min(colorIndex, 63)];
-        color = {r: color.r, g: color.g, b: color.b};
+        let color = {...palette[Math.min(colorIndex, 63)]};
 
         // Apply color emphasis with different behavior for RGB vs composite PPUs
         const emphasis = this.mask >> 5;
@@ -667,6 +709,62 @@ export class PPU {
             if (emphasis & 2) { color.r *= 0.75; color.b *= 0.75; }
             if (emphasis & 4) { color.r *= 0.75; color.g *= 0.75; }
         }
+
+        const result = { r: Math.floor(color.r), g: Math.floor(color.g), b: Math.floor(color.b) };
+        
+        // Cache the result
+        this.colorCache[cacheIndex] = result;
+        return result;
+    }
+        
+        let color = {...palette[Math.min(colorIndex, 63)]};
+
+        // Apply color emphasis with different behavior for RGB vs composite PPUs
+        const emphasis = this.mask >> 5;
+        if (this.ppuType === 'RGB') {
+            // RGB PPUs maximize brightness of emphasized channels
+            if (emphasis & 1) { color.g = 255; }
+            if (emphasis & 2) { color.r = 255; }
+            if (emphasis & 4) { color.b = 255; }
+        } else {
+            // Composite PPUs darken non-emphasized channels
+            if (emphasis & 1) { color.g *= 0.75; color.b *= 0.75; }
+            if (emphasis & 2) { color.r *= 0.75; color.b *= 0.75; }
+            if (emphasis & 4) { color.r *= 0.75; color.g *= 0.75; }
+        }
+
+        const result = { r: Math.floor(color.r), g: Math.floor(color.g), b: Math.floor(color.b) };
+        
+        // Cache the result
+        this.colorCache[cacheIndex] = result;
+        return result;
+    }
+        
+        const palette = [
+            {r: 84,  g: 84,  b: 84},   {r: 0,   g: 30,  b: 116},  {r: 8,   g: 16,  b: 144},  {r: 48,  g: 0,   b: 136},
+            {r: 68,  g: 0,   b: 100},  {r: 92,  g: 0,   b: 48},   {r: 84,  g: 4,   b: 0},    {r: 60,  g: 24,  b: 0},
+            {r: 32,  g: 42,  b: 0},    {r: 8,   g: 58,  b: 0},    {r: 0,   g: 64,  b: 0},    {r: 0,   g: 60,  b: 0},
+            {r: 0,   g: 50,  b: 60},   {r: 0,   g: 0,   b: 0},    {r: 0,   g: 0,   b: 0},    {r: 0,   g: 0,   b: 0},
+            {r: 152, g: 152, b: 152},  {r: 8,   g: 76,  b: 196},  {r: 48,  g: 50,  b: 236},  {r: 92,  g: 30,  b: 228},
+            {r: 136, g: 20,  b: 176},  {r: 160, g: 20,  b: 100},  {r: 152, g: 34,  b: 32},   {r: 120, g: 60,  b: 0},
+            {r: 84,  g: 90,  b: 0},    {r: 40,  g: 114, b: 0},    {r: 8,   g: 124, b: 0},    {r: 0,   g: 118,  b: 40},
+            {r: 0,   g: 102, b: 120},  {r: 0,   g: 0,   b: 0},    {r: 0,   g: 0,   b: 0},    {r: 0,   g: 0,   b: 0},
+            {r: 236, g: 236, b: 236},  {r: 76,  g: 154, b: 236},  {r: 120, g: 124, b: 236},  {r: 176, g: 98,  b: 236},
+            {r: 228, g: 84,  b: 236},  {r: 236, g: 88,  b: 180},  {r: 236, g: 120, b: 120},  {r: 212, g: 136, b: 32},
+            {r: 160, g: 170, b: 0},    {r: 116, g: 196, b: 0},    {r: 76,  g: 208, b: 32},   {r: 56,  g: 204, b: 108},
+            {r: 56,  g: 180, b: 204},  {r: 60,  g: 60,  b: 60},    {r: 0,   g: 0,   b: 0},    {r: 0,   g: 0,   b: 0},
+            {r: 236, g: 236, b: 236},  {r: 168, g: 204, b: 236},  {r: 188, g: 188, b: 236},  {r: 212, g: 178, b: 236},
+            {r: 236, g: 174, b: 236},  {r: 236, g: 174, b: 212},  {r: 236, g: 180, b: 176},  {r: 228, g: 196, b: 144},
+            {r: 204, g: 210, b: 120},  {r: 180, g: 222, b: 120},  {r: 168, g: 226, b: 144},  {r: 152, g: 226, b: 180},
+            {r: 160, g: 214, b: 228},  {r: 160, g: 160, b: 160},  {r: 0,   g: 0,   b: 0},    {r: 0,   g: 0,   b: 0},
+        ];
+        
+        let color = {...palette[Math.min(colorIndex, 63)]};
+
+        const emphasis = this.mask >> 5;
+        if (emphasis & 1) { color.g *= 0.75; color.b *= 0.75; }
+        if (emphasis & 2) { color.r *= 0.75; color.b *= 0.75; }
+        if (emphasis & 4) { color.r *= 0.75; color.g *= 0.75; }
 
         const result = { r: Math.floor(color.r), g: Math.floor(color.g), b: Math.floor(color.b) };
         
@@ -784,7 +882,7 @@ export class PPU {
                 // OAMADDR corruption bug on 2C02G
                 if (this.ppuRevision === 'G') {
                     // Copy sprites 8 and 9 (address $20) to the target address
-                    // This is a simplified version of corruption
+                    // This is a simplified version of the corruption
                     if (data < 0xF8) { // Only corrupt if not at end of OAM
                         for (let i = 0; i < 8; i++) {
                             this.oam[(data & 0xF8) + i] = this.oam[0x20 + i];
@@ -921,7 +1019,7 @@ export class PPU {
             // The result is already in 'result'
         } else {
             // Earlier revisions might not support palette reads
-            // Return buffered value instead
+            // Return the buffered value instead
             result = this.dataBuffer;
         }
         
