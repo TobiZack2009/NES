@@ -256,8 +256,8 @@
 
         #pattern-canvas {
             image-rendering: pixelated;
-            width: 512px;
-            height: 256px;
+            width: 256px; /* 128px per table * 2 */
+            height: 128px; /* 16 tiles * 8 pixels */
             border: 1px solid var(--border-color);
         }
 
@@ -360,7 +360,9 @@
         let animationFrameId = null;
         let isRunning = false;
         let lastPc = 0;
-        
+        let lastTimestamp = 0;
+        const CYCLES_PER_FRAME = 29830; // NTSC PPU cycles per frame / 3 (CPU cycles) = ~29830 CPU cycles
+
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const imageData = ctx.createImageData(256, 240);
@@ -380,7 +382,7 @@
         const paletteOutput = document.getElementById('palette-output');
         const patternCanvas = document.getElementById('pattern-canvas');
         const patternCtx = patternCanvas.getContext('2d');
-        const paletteSelector = document.getElementById('pattern-palette-selector');
+        const patternPaletteSelector = document.getElementById('pattern-palette-selector');
 
         function updateUIState() {
             runBtn.disabled = isRunning || !nes.cartridge;
@@ -452,8 +454,10 @@
 
         function updatePatternTableView() {
             if (!nes.ppu) return;
-            const selectedPalette = parseInt(paletteSelector.value);
+            const selectedPalette = parseInt(patternPaletteSelector.value);
 
+            patternCtx.clearRect(0, 0, patternCanvas.width, patternCanvas.height);
+            
             const drawTable = (tableIndex, startX) => {
                 for (let tileY = 0; tileY < 16; tileY++) {
                     for (let tileX = 0; tileX < 16; tileX++) {
@@ -464,13 +468,7 @@
                             for (let col = 0; col < 8; col++) {
                                 const pixel = ((plane1 >> (7 - col)) & 1) | (((plane2 >> (7 - col)) & 1) << 1);
                                 
-                                const paletteBase = selectedPalette < 4 ? 0x3F00 : 0x3F10;
-                                const paletteNumInGroup = selectedPalette % 4;
-                                let colorAddr = paletteBase + paletteNumInGroup * 4 + pixel;
-                                if (pixel === 0) colorAddr = 0x3F00; // Universal background
-
-                                const colorIndex = nes.ppu.ppuRead(colorAddr);
-                                const color = nes.ppu.getNESColor(colorIndex);
+                                const color = nes.ppu.getNESColor(nes.ppu.getColorFromPalette(selectedPalette, pixel));
                                 patternCtx.fillStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
                                 patternCtx.fillRect(startX + tileX * 8 + col, tileY * 8 + row, 1, 1);
                             }
@@ -494,7 +492,8 @@
                 <tr><td class="label">X:</td><td>0x${cpu.x.toString(16).toUpperCase().padStart(2, '0')}</td></tr>
                 <tr><td class="label">Y:</td><td>0x${cpu.y.toString(16).toUpperCase().padStart(2, '0')}</td></tr>
                 <tr><td class="label">SP:</td><td>0x${cpu.stkp.toString(16).toUpperCase().padStart(2, '0')}</td></tr>
-                ${ppu ? `<tr><td class="label">Scroll:</td><td>${ppu.scrollX}, ${ppu.scrollY}</td></tr>` : ''}
+                ${ppu ? `<tr><td class="label">Scroll:</td><td>${ppu.fineX}, ${(ppu.addr >> 5) & 0x1F} (${(ppu.addr >> 12) & 0x07})</td></tr>` : ''}
+                ${ppu ? `<tr><td class="label">VRAM:</td><td>0x${ppu.addr.toString(16).toUpperCase().padStart(4, '0')}</td></tr>` : ''}
             `;
 
             const flags = [
@@ -534,18 +533,36 @@
             if (document.getElementById('patterns').classList.contains('active')) updatePatternTableView();
         }
 
-        function run() {
-            if (!isRunning) return;
-
-            if (nes.ppu) {
-                const targetFrame = nes.ppu.frame + 1;
-                while(nes.ppu.frame < targetFrame) {
-                    nes.clock();
-                }
-            } else {
-                for(let i = 0; i < 30000; i++) nes.clock();
+        function run(timestamp) {
+            if (!isRunning) {
+                lastTimestamp = 0;
+                return;
             }
 
+            if (lastTimestamp === 0) {
+                lastTimestamp = timestamp;
+            }
+            const deltaTime = (timestamp - lastTimestamp) / 1000;
+            lastTimestamp = timestamp;
+            
+            // Assuming 60 frames per second, we want to run ~29830 CPU cycles
+            // PPU cycles = CPU cycles * 3. NES PPU runs at 5.369 MHz, so ~89488 PPU cycles per frame.
+            // 89488 / 3 (PPU cycles per CPU cycle) = ~29829 CPU cycles per frame.
+            const targetCPUCycles = Math.floor(deltaTime * (1789773 / 1)); // NTSC CPU clock Hz
+            
+            // Run until the next frame boundary or accumulate cycles
+            let cyclesRan = 0;
+            const initialFrame = nes.ppu ? nes.ppu.frame : -1;
+
+            while (cyclesRan < targetCPUCycles) {
+                nes.clock();
+                cyclesRan++;
+                // If a new frame completed, render and break to ensure frame sync
+                if (nes.ppu && nes.ppu.frame > initialFrame) {
+                    break;
+                }
+            }
+            
             renderScreen();
             updateDebugInfo();
             animationFrameId = requestAnimationFrame(run);
@@ -555,6 +572,7 @@
             if (nes.cartridge) {
                 isRunning = true;
                 statusEl.textContent = "Emulator is running.";
+                lastTimestamp = 0; // Reset timer for fresh start
                 run();
                 updateUIState();
             }
@@ -636,7 +654,7 @@
             }
         });
         
-        paletteSelector.addEventListener('change', updatePatternTableView);
+        patternPaletteSelector.addEventListener('change', updatePatternTableView);
 
         const keyMap = {
             'KeyX': 'A', 'KeyZ': 'B', 'ShiftRight': 'SELECT', 'Enter': 'START',
