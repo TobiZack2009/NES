@@ -2,44 +2,34 @@
 
 This guide provides a cycle-accurate roadmap for building a Nintendo Entertainment System (NES) emulator from scratch using JavaScript and Rollup.
 
-## **Current Implementation Status:**
+## **Current Implementation Status (v2.0)**
 
 **✅ Completed:**
-- Project structure with Rollup bundler
-- Bus class with memory map routing  
-- CPU class with complete opcode dispatch table (256 opcodes)
-- iNES file format parser and cartridge loader (Mapper 0/NROM)
-- Basic HTML frontend with debugging controls
-- PPU class with complete rendering pipeline
-- NES color palette implementation
-- Comprehensive testing framework with unit tests, movie recording/playback
-- Automated test suite for CPU and PPU
-- NES test integration (nestest.log parser and state comparison)
-- Controller input for player 1
-- **Real-time disassembler with current instruction highlighting**
-- **Instruction logging with CPU state tracking**
-- **Cycle-accurate CPU with 99.5% nestest compliance**
-- **JSDoc documentation for all core files**
-- **Collapsible UI panels for better organization**
-- **Organized test structure with dedicated CPU test folder**
+- **Modern Debugger UI**: A responsive, two-column layout with a tabbed interface for all debug views.
+- **CPU & PPU Core**: Cycle-accurate CPU and a rewritten, more accurate PPU rendering pipeline.
+- **Full Disassembly View**: The debugger shows the complete disassembly of the PRG ROM, with auto-scrolling and highlighting of the current instruction.
+- **Memory Viewer**: A new tab shows a live hex dump of the Zero Page RAM.
+- **Palette & Pattern Viewers**: New debugger tabs provide a visual representation of all PPU palettes and pattern table tiles, with palette selection for tile viewing.
+- **PPU Accuracy Fixes**:
+    - `PPUSTATUS` read now correctly resets the address latch.
+    - Greyscale and Color Emphasis effects via `PPUMASK` are implemented.
+    - The PPU rendering pipeline has been significantly refactored for greater accuracy.
+- **Input Handling**: Keyboard controls are implemented and mapped to standard conventions.
+- **Project Architecture**: Modular structure with Rollup, ES6 modules, and a central event bus.
+- **Cartridge Loading**: Supports iNES file format (Mapper 0/NROM).
 
 **🚧 In Progress:**
-- Sprite pattern bit calculation (basic implementation)
-- Additional mappers beyond Mapper 0
-- Web Audio API integration for sound
-- Performance optimizations
-- **Advanced debugging features**
+- **Performance Optimization**: The main rendering loop is still causing screen flashing, indicating a performance bottleneck or a flaw in the `requestAnimationFrame` logic. **This is the highest priority.**
+- **Sprite Rendering**: Basic sprite evaluation is in, but full rendering (including priority and overflow) is incomplete.
+- **Sound**: Web Audio API integration for APU sound output.
+- **Advanced Mappers**: Support for mappers beyond 0.
 
 **📋 Next Steps:**
-- Complete sprite rendering implementation
-- Implement additional mappers (1, 2, 3, 4, 7)
-- Add Web Audio API for authentic NES sound output
-- Performance optimizations
-- **Enhance PPU sprite and background rendering**
-- **Implement additional CPU opcodes (minor undocumented ones)**
-- **Add save state functionality**
-- **Improve ROM compatibility testing**
-
+- **Resolve Screen Flashing**: Stabilize the main `run` loop to provide a smooth, consistent 60 FPS.
+- Complete sprite rendering implementation, including priority and sprite 0 hit.
+- Implement additional mappers (1, 2, 3, 4, 7).
+- Add save state functionality.
+- Improve ROM compatibility testing.
 ---
 
 ## **1. Project Architecture**
@@ -320,9 +310,6 @@ npm run test-full
 npm run test
 
 # Run 1000 tests (comprehensive validation)
-npm run test-full
-
-# Debug specific instruction
 npm run test-debug
 ```
 
