@@ -393,6 +393,8 @@
 
         function renderScreen() {
             if (!nes.ppu) return;
+            
+            // Get completed frame from PPU (handles double buffering internally)
             const buffer = nes.ppu.getScreenBuffer();
             for (let i = 0; i < buffer.length; i++) {
                 imageData.data[i] = buffer[i];
@@ -550,20 +552,20 @@
             // 89488 / 3 (PPU cycles per CPU cycle) = ~29829 CPU cycles per frame.
             const targetCPUCycles = Math.floor(deltaTime * (1789773 / 1)); // NTSC CPU clock Hz
             
-            // Run until the next frame boundary or accumulate cycles
+            // Only execute cycles for one frame at a time for better sync
             let cyclesRan = 0;
             const initialFrame = nes.ppu ? nes.ppu.frame : -1;
-
-            while (cyclesRan < targetCPUCycles) {
+            
+            // Run exactly one frame worth of cycles
+            while (cyclesRan < targetCPUCycles && nes.ppu.frame <= initialFrame) {
                 nes.clock();
                 cyclesRan++;
-                // If a new frame completed, render and break to ensure frame sync
-                if (nes.ppu && nes.ppu.frame > initialFrame) {
-                    break;
-                }
             }
             
-            renderScreen();
+            // Only render when frame actually completed
+            if (nes.ppu.frame > initialFrame) {
+                renderScreen();
+            }
             updateDebugInfo();
             animationFrameId = requestAnimationFrame(run);
         }

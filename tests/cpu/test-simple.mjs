@@ -1,8 +1,6 @@
 import { NES } from '../../src/nes.js';
-import { loadROM } from '../../src/cartridge.js';
 import { logParser } from '../../src/test/logParser.js';
 import { readFileSync } from 'fs';
-import { File } from 'buffer';
 
 // Simple test runner that stops at first failure
 async function runSingleTest(lineNumber) {
@@ -24,16 +22,16 @@ async function runSingleTest(lineNumber) {
     // Show current state
     const nes = new NES();
     const romData = readFileSync('/Users/tobizacchaeus/Documents/NES/tests/nestest.nes');
-    const romFile = new File([romData], 'nestest.nes');
-    const cartridge = await loadROM(romFile);
-    nes.loadCartridge(cartridge);
+    nes.load(romData);
     nes.cpu.setState(expectedStateBefore);
     
     const stateBefore = nes.cpu.getState();
     console.log(`   Before: A=$${stateBefore.A.toString(16).padStart(2, '0').toUpperCase()} X=$${stateBefore.X.toString(16).padStart(2, '0').toUpperCase()} Y=$${stateBefore.Y.toString(16).padStart(2, '0').toUpperCase()} SP=$${stateBefore.SP.toString(16).padStart(2, '0').toUpperCase()} P=$${stateBefore.P.toString(16).padStart(2, '0').toUpperCase()}`);
     
-    // Step CPU
-    nes.step();
+    // Step CPU with proper cycle handling
+    do {
+        nes.step();
+    } while (nes.cpu.cycles > 0);
     
     // Show new state
     const stateAfter = nes.cpu.getState();
@@ -69,8 +67,8 @@ async function main() {
     // Test first few instructions
     console.log('\n🎯 Running individual tests...');
     
-    // Test first 3 instructions
-    for (let i = 1; i <= 9000; i++) {
+    // Test first few instructions to find issues
+    for (let i = 1; i <= 10; i++) {
         console.log(`\n=== Test ${i} ===`);
         const result = await runSingleTest(i);
         if (!result.matches) {

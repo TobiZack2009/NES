@@ -5,7 +5,6 @@
  */
 
 import { NES } from '../../src/nes.js';
-import { loadROM } from '../../src/cartridge.js';
 import { logParser } from '../../src/test/logParser.js';
 import { readFileSync } from 'fs';
 import { File } from 'buffer';
@@ -20,11 +19,9 @@ async function main() {
     
     // Load nestest.nes ROM
     const romData = readFileSync('nestest.nes');
-    const romFile = new File([romData], 'nestest.nes', { type: 'application/x-nes' });
-    const cartridge = await loadROM(romFile);
     
     const nes = new NES();
-    nes.loadCartridge(cartridge);
+    nes.load(romData);
     
     // Reset and set PC to $C000
     nes.reset();

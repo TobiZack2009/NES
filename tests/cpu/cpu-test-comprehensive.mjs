@@ -6,7 +6,6 @@
  */
 
 import { NES } from '../../src/nes.js';
-import { loadROM } from '../../src/cartridge.js';
 import { logParser } from '../../src/test/logParser.js';
 import { readFileSync } from 'fs';
 
@@ -37,9 +36,7 @@ class CPUTestRunner {
         
         // Load nestest.nes ROM
         const romData = readFileSync('./tests/nestest.nes');
-        const romFile = new File([romData], 'nestest.nes', { type: 'application/x-nes' });
-        const cartridge = await loadROM(romFile);
-        this.nes.loadCartridge(cartridge);
+        this.nes.load(romData);
         
         // Set PC to C000 (start of nestest)
         this.nes.cpu.pc = 0xC000;

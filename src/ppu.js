@@ -33,6 +33,11 @@ export class PPU {
         this.bgShifterAttribHi = 0;
         
         this.screen = new Uint8Array(256 * 240 * 4);
+        this.screenBackbuffer = new Uint8Array(256 * 240 * 4); // Double buffer
+        this.frameReady = false; // Flag to indicate when frame is ready to render
+        
+        // Cache for palette colors to avoid repeated calculations
+        this.colorCache = new Array(512); // 8 palettes * 64 colors
         
         this.nmi = false;
         this.spriteZeroHit = false;
@@ -40,7 +45,7 @@ export class PPU {
         this.spriteZeroPossible = false; // Internal flag for sprite 0 hit detection
         
         this.spriteScanline = [];
-        this.spritePatterns = new Uint8Array(8 * 2); // 8 sprites, 2 pattern bytes per sprite
+        this.spritePatterns = new Uint8Array(8 * 10); // 8 sprites, extended pattern data
         this.spritePositions = new Uint8Array(8);
         this.spritePriorities = new Uint8Array(8);
         this.spritePalettes = new Uint8Array(8);
@@ -87,6 +92,10 @@ reset() {
         this.oam.fill(0);
         this.vram.fill(0);
         this.palette.fill(0);
+        this.screen.fill(0);
+        this.screenBackbuffer.fill(0);
+        this.frameReady = false;
+        this.colorCache.length = 0; // Clear color cache
         
         // Default palette values (for visual debugging until real palette is loaded)
         for (let i = 0; i < 32; i++) {
@@ -208,6 +217,9 @@ reset() {
         // Sprite evaluation (happens on cycle 257 for visible scanlines)
         if (isVisibleScanline && this.cycle === 257) {
             this.evaluateSprites();
+            if (this.mask & 0x10) { // Only fetch sprite patterns if sprites enabled
+                this.fetchSpritePatterns();
+            }
         }
         
         // Pixel rendering
@@ -229,7 +241,9 @@ reset() {
             this.status &= ~0x20; // Clear Sprite Overflow flag
             this.nmi = false;
             this.spriteZeroPossible = false; // Reset sprite 0 hit flag
-            this.screen.fill(0); // Clear screen buffer for new frame
+            // Clear backbuffer, not front buffer to prevent flashing
+            this.screenBackbuffer.fill(0); 
+            this.frameReady = false;
         }
 
         // Increment cycle, scanline, frame
@@ -240,6 +254,7 @@ reset() {
             if (this.scanline >= 261) {
                 this.scanline = -1; // Wrap around to pre-render scanline
                 this.frame++;
+                this.frameReady = true; // Mark frame as ready for rendering
             }
         }
     }
@@ -248,11 +263,19 @@ reset() {
         const x = this.cycle - 1;
         const y = this.scanline;
         
+        // Skip rendering for x = 0 (first cycle is for fetches)
+        if (x === 0) return;
+        
+        // Early exit if both background and sprites are disabled
+        if (!(this.mask & 0x18)) return;
+        
         let bgPixel = 0;
         let bgPalette = 0;
+        let bgOpaque = false;
 
+        // Background rendering
         if (this.mask & 0x08) { // Background rendering enabled
-            const fineXShift = 15 - this.fineX; // Selects the fineX bit from the 16-bit shifter
+            const fineXShift = 15 - this.fineX; // Selects fineX bit from 16-bit shifter
 
             const p0 = (this.bgShifterPatternLo >> fineXShift) & 1;
             const p1 = (this.bgShifterPatternHi >> fineXShift) & 1;
@@ -261,21 +284,75 @@ reset() {
             const a0 = (this.bgShifterAttribLo >> fineXShift) & 1;
             const a1 = (this.bgShifterAttribHi >> fineXShift) & 1;
             bgPalette = (a1 << 1) | a0;
+            
+            bgOpaque = bgPixel !== 0;
         }
 
-        // TODO: Sprite rendering and composition with background
-        
-        const finalPixel = bgPixel;
-        const finalPalette = bgPalette;
+        // Sprite rendering
+        let spritePixel = 0;
+        let spritePalette = 0;
+        let spritePriority = 0;
+        let spriteOpaque = false;
+        let spriteFound = false;
+        let spriteZeroHit = false;
+
+        if (this.mask & 0x10) { // Sprite rendering enabled
+            // Find the first non-transparent sprite pixel at this x position
+            for (let i = 0; i < this.spriteScanline.length; i++) {
+                const spriteData = this.getSpritePixel(i, x);
+                
+                if (spriteData.pixel !== 0) { // Non-transparent sprite pixel
+                    spritePixel = spriteData.pixel;
+                    spritePalette = spriteData.palette;
+                    spritePriority = spriteData.priority;
+                    spriteOpaque = true;
+                    spriteFound = true;
+                    
+                    // Check for sprite 0 hit
+                    if (this.spriteZeroPossible && spriteData.oamIndex === 0 && bgOpaque && x > 0) {
+                        spriteZeroHit = true;
+                    }
+                    break; // Only check first sprite (priority handled below)
+                }
+            }
+        }
+
+        // Sprite 0 hit detection
+        if (spriteZeroHit && !(this.status & 0x40)) { // Only set once per frame
+            this.status |= 0x40; // Set sprite 0 hit flag
+        }
+
+        // Final pixel composition
+        let finalPixel = 0;
+        let finalPalette = 0;
+
+        if (!spriteFound) {
+            // No sprite pixel at this position
+            finalPixel = bgPixel;
+            finalPalette = bgPalette;
+        } else if (!bgOpaque) {
+            // Background is transparent, show sprite
+            finalPixel = spritePixel;
+            finalPalette = spritePalette;
+        } else if (spriteOpaque && spritePriority === 0) {
+            // Sprite has priority over background
+            finalPixel = spritePixel;
+            finalPalette = spritePalette;
+        } else {
+            // Background has priority or sprite is transparent
+            finalPixel = bgPixel;
+            finalPalette = bgPalette;
+        }
 
         const colorIndex = this.getColorFromPalette(finalPalette, finalPixel);
         const pixelIndex = (y * 256 + x) * 4;
         const color = this.getNESColor(colorIndex);
         
-        this.screen[pixelIndex] = color.r;
-        this.screen[pixelIndex + 1] = color.g;
-        this.screen[pixelIndex + 2] = color.b;
-        this.screen[pixelIndex + 3] = 255;
+        // Write to backbuffer instead of front buffer
+        this.screenBackbuffer[pixelIndex] = color.r;
+        this.screenBackbuffer[pixelIndex + 1] = color.g;
+        this.screenBackbuffer[pixelIndex + 2] = color.b;
+        this.screenBackbuffer[pixelIndex + 3] = 255;
     }
     
     fetchNametableByte() {
@@ -318,32 +395,123 @@ reset() {
         this.spriteZeroPossible = false;
         let spriteCount = 0;
         const spriteHeight = (this.control & 0x20) ? 16 : 8; // PPUCTRL bit 5
+        let foundSpriteAfter8 = false;
+        let ninthSpriteIndex = -1;
         
-        for (let i = 0; i < 64 && spriteCount < 8; i++) {
+        for (let i = 0; i < 64; i++) {
             const oamEntryY = this.oam[i * 4];
             
             // Check if sprite is on the current scanline
             if (this.scanline >= oamEntryY && this.scanline < oamEntryY + spriteHeight) {
-                const sprite = {
-                    y: oamEntryY,
-                    id: this.oam[i * 4 + 1],
-                    attr: this.oam[i * 4 + 2],
-                    x: this.oam[i * 4 + 3],
-                    palette: (this.oam[i * 4 + 2] & 0x03) + 4, // Sprite palettes are 4-7
-                    priority: (this.oam[i * 4 + 2] & 0x20) ? 1 : 0,
-                    hFlip: (this.oam[i * 4 + 2] & 0x40) ? 1 : 0,
-                    vFlip: (this.oam[i * 4 + 2] & 0x80) ? 1 : 0,
-                    oamIndex: i // Keep original OAM index for sprite 0 hit
-                };
-                
-                if (i === 0) this.spriteZeroPossible = true; // Mark sprite 0 potentially on this line
-                this.spriteScanline.push(sprite);
-                spriteCount++;
+                if (spriteCount < 8) {
+                    // First 8 sprites go to spriteScanline for rendering
+                    const sprite = {
+                        y: oamEntryY,
+                        id: this.oam[i * 4 + 1],
+                        attr: this.oam[i * 4 + 2],
+                        x: this.oam[i * 4 + 3],
+                        palette: (this.oam[i * 4 + 2] & 0x03) + 4, // Sprite palettes are 4-7
+                        priority: (this.oam[i * 4 + 2] & 0x20) ? 1 : 0,
+                        hFlip: (this.oam[i * 4 + 2] & 0x40) ? 1 : 0,
+                        vFlip: (this.oam[i * 4 + 2] & 0x80) ? 1 : 0,
+                        oamIndex: i // Keep original OAM index for sprite 0 hit
+                    };
+                    
+                    if (i === 0) this.spriteZeroPossible = true; // Mark sprite 0 potentially on this line
+                    this.spriteScanline.push(sprite);
+                    spriteCount++;
+                } else if (!foundSpriteAfter8) {
+                    // Found the 9th sprite - set overflow flag
+                    this.status |= 0x20; // Sprite overflow
+                    foundSpriteAfter8 = true;
+                    ninthSpriteIndex = i;
+                    break; // We only need to find the 9th sprite to set the flag
+                }
             }
         }
-        if (spriteCount >= 8) {
-            this.status |= 0x20; // Sprite overflow
+        
+        // Store the 9th sprite index in OAMADDR as per hardware behavior (some games rely on this)
+        if (ninthSpriteIndex >= 0) {
+            this.oamAddr = ninthSpriteIndex;
         }
+    }
+    
+    fetchSpritePatterns() {
+        const spriteHeight = (this.control & 0x20) ? 16 : 8;
+        const patternTable = (this.control & 0x08) ? 0x1000 : 0x0000; // PPUCTRL bit 3
+        
+        // Clear previous sprite pattern data
+        this.spritePatterns.fill(0);
+        this.spritePositions.fill(0);
+        this.spritePriorities.fill(0);
+        this.spritePalettes.fill(0);
+        
+        // For each sprite on this scanline, fetch its pattern data
+        for (let i = 0; i < this.spriteScanline.length; i++) {
+            const sprite = this.spriteScanline[i];
+            
+            // Calculate which tile line to fetch from sprite
+            let tileY = this.scanline - sprite.y;
+            if (sprite.vFlip) {
+                tileY = spriteHeight - 1 - tileY;
+            }
+            
+            let patternAddr;
+            if (spriteHeight === 16) {
+                // 8x16 sprites: use bit 0 of tile ID to select pattern table
+                const table = sprite.id & 1 ? 0x1000 : 0x0000;
+                const tileIndex = (sprite.id & 0xFE) | (tileY >= 8 ? 1 : 0);
+                patternAddr = table + (tileIndex << 4) + ((tileY & 7) << 1);
+            } else {
+                // 8x8 sprites: use pattern table from PPUCTRL
+                patternAddr = patternTable + (sprite.id << 4) + ((tileY & 7) << 1);
+            }
+            
+            // Fetch pattern bytes (low and high bits)
+            const patternLow = this.ppuRead(patternAddr);
+            const patternHigh = this.ppuRead(patternAddr + 1);
+            
+            // Store pattern data for this sprite
+            this.spritePatterns[i * 2] = patternLow;     // Pattern low bits
+            this.spritePatterns[i * 2 + 1] = patternHigh; // Pattern high bits
+            this.spritePositions[i] = sprite.x;
+            this.spritePriorities[i] = sprite.priority;
+            this.spritePalettes[i] = sprite.palette;
+            
+            // Store additional sprite info for rendering
+            this.spritePatterns[i * 2 + 8] = sprite.hFlip;
+            this.spritePatterns[i * 2 + 9] = sprite.oamIndex;
+        }
+    }
+    
+    getSpritePixel(spriteIndex, x) {
+        const spriteX = this.spritePositions[spriteIndex];
+        if (x < spriteX || x >= spriteX + 8) {
+            return { pixel: 0, palette: 0, priority: 0 }; // No pixel at this x position
+        }
+        
+        const relativeX = x - spriteX;
+        const hFlip = this.spritePatterns[spriteIndex * 2 + 8];
+        const bitPosition = hFlip ? relativeX : (7 - relativeX);
+        
+        const patternLow = this.spritePatterns[spriteIndex * 2];
+        const patternHigh = this.spritePatterns[spriteIndex * 2 + 1];
+        
+        const bit0 = (patternLow >> bitPosition) & 1;
+        const bit1 = (patternHigh >> bitPosition) & 1;
+        const pixel = (bit1 << 1) | bit0;
+        
+        // Pixel 0 is transparent for sprites
+        if (pixel === 0) {
+            return { pixel: 0, palette: 0, priority: 0 };
+        }
+        
+        return {
+            pixel: pixel,
+            palette: this.spritePalettes[spriteIndex],
+            priority: this.spritePriorities[spriteIndex],
+            oamIndex: this.spritePatterns[spriteIndex * 2 + 9]
+        };
     }
     
     getColorFromPalette(palette, index) {
@@ -356,6 +524,12 @@ reset() {
             colorIndex &= 0x30;
         }
         
+        // Check cache first
+        const cacheIndex = (this.mask & 0xE0) | colorIndex; // Include emphasis in cache key
+        if (this.colorCache[cacheIndex]) {
+            return this.colorCache[cacheIndex];
+        }
+        
         const palette = [
             {r: 84,  g: 84,  b: 84},   {r: 0,   g: 30,  b: 116},  {r: 8,   g: 16,  b: 144},  {r: 48,  g: 0,   b: 136},
             {r: 68,  g: 0,   b: 100},  {r: 92,  g: 0,   b: 48},   {r: 84,  g: 4,   b: 0},    {r: 60,  g: 24,  b: 0},
@@ -363,7 +537,7 @@ reset() {
             {r: 0,   g: 50,  b: 60},   {r: 0,   g: 0,   b: 0},    {r: 0,   g: 0,   b: 0},    {r: 0,   g: 0,   b: 0},
             {r: 152, g: 152, b: 152},  {r: 8,   g: 76,  b: 196},  {r: 48,  g: 50,  b: 236},  {r: 92,  g: 30,  b: 228},
             {r: 136, g: 20,  b: 176},  {r: 160, g: 20,  b: 100},  {r: 152, g: 34,  b: 32},   {r: 120, g: 60,  b: 0},
-            {r: 84,  g: 90,  b: 0},    {r: 40,  g: 114, b: 0},    {r: 8,   g: 124, b: 0},    {r: 0,   g: 118, b: 40},
+            {r: 84,  g: 90,  b: 0},    {r: 40,  g: 114, b: 0},    {r: 8,   g: 124, b: 0},    {r: 0,   g: 118,  b: 40},
             {r: 0,   g: 102, b: 120},  {r: 0,   g: 0,   b: 0},    {r: 0,   g: 0,   b: 0},    {r: 0,   g: 0,   b: 0},
             {r: 236, g: 236, b: 236},  {r: 76,  g: 154, b: 236},  {r: 120, g: 124, b: 236},  {r: 176, g: 98,  b: 236},
             {r: 228, g: 84,  b: 236},  {r: 236, g: 88,  b: 180},  {r: 236, g: 120, b: 120},  {r: 212, g: 136, b: 32},
@@ -382,7 +556,11 @@ reset() {
         if (emphasis & 2) { color.r *= 0.75; color.b *= 0.75; }
         if (emphasis & 4) { color.r *= 0.75; color.g *= 0.75; }
 
-        return { r: Math.floor(color.r), g: Math.floor(color.g), b: Math.floor(color.b) };
+        const result = { r: Math.floor(color.r), g: Math.floor(color.g), b: Math.floor(color.b) };
+        
+        // Cache the result
+        this.colorCache[cacheIndex] = result;
+        return result;
     }
     
     // PPU Register Interface
@@ -422,7 +600,7 @@ reset() {
                 this.tempAddr = (this.tempAddr & 0xF3FF) | ((data & 0x03) << 10); // Nametable X/Y
                 this.tempAddr = (this.tempAddr & 0x8FFF) | ((data & 0x80) << 5); // Fine Y
                 break;
-            case 0x01: this.mask = data; break; // PPUMASK
+            case 0x01: this.mask = data; this.colorCache.length = 0; break; // PPUMASK - clear color cache
             case 0x03: this.oamAddr = data; break; // OAMADDR
             case 0x04: this.oam[this.oamAddr] = data; this.oamAddr++; break; // OAMDATA
             case 0x05: // PPUSCROLL
@@ -516,7 +694,16 @@ reset() {
     }
     
     getScreen() { return this.screen; }
-    getScreenBuffer() { return this.getScreen(); }
+    getScreenBuffer() { 
+        // Swap buffers when frame is complete and return completed frame
+        if (this.frameReady) {
+            const temp = this.screen;
+            this.screen = this.screenBackbuffer;
+            this.screenBackbuffer = temp;
+            this.frameReady = false;
+        }
+        return this.screen; 
+    }
     
     checkNMI() {
         if (this.nmi) {
