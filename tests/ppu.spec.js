@@ -28,6 +28,9 @@ describe("PPU", function() {
         
         // Allow register writes (disable power-up protection for testing)
         ppu.canWriteRegisters = true;
+        
+        // Force power-up cycles to complete to allow writes
+        ppu.powerUpCycles = 30000;
     });
 
     describe("PPUCTRL ($2000) - Control Register", function() {
@@ -37,27 +40,27 @@ describe("PPU", function() {
 
         it("should set NMI enable flag", function() {
             ppu.writeRegister(0x00, 0x80);
-            assert.isTrue(ppu.control & 0x80);
+            assert.equal(ppu.control & 0x80, 0x80);
         });
 
         it("should set sprite size flag (8x16 mode)", function() {
             ppu.writeRegister(0x00, 0x20);
-            assert.isTrue(ppu.control & 0x20);
+            assert.equal(ppu.control & 0x20, 0x20);
         });
 
         it("should set background pattern table address", function() {
             ppu.writeRegister(0x00, 0x10);
-            assert.isTrue(ppu.control & 0x10);
+            assert.equal(ppu.control & 0x10, 0x10);
         });
 
         it("should set sprite pattern table address", function() {
             ppu.writeRegister(0x00, 0x08);
-            assert.isTrue(ppu.control & 0x08);
+            assert.equal(ppu.control & 0x08, 0x08);
         });
 
         it("should set VRAM address increment mode", function() {
             ppu.writeRegister(0x00, 0x04);
-            assert.isTrue(ppu.control & 0x04);
+            assert.equal(ppu.control & 0x04, 0x04);
         });
 
         it("should set nametable base address", function() {
@@ -154,18 +157,18 @@ describe("PPU", function() {
 
         it("should set and clear sprite 0 hit flag", function() {
             ppu.status |= 0x40; // Set sprite 0 hit
-            assert.isTrue(ppu.status & 0x40);
+            assert.equal(ppu.status & 0x40, 0x40);
             
             ppu.status &= ~0x40; // Clear sprite 0 hit
-            assert.isFalse(ppu.status & 0x40);
+            assert.equal(ppu.status & 0x40, 0);
         });
 
         it("should set and clear sprite overflow flag", function() {
             ppu.status |= 0x20; // Set sprite overflow
-            assert.isTrue(ppu.status & 0x20);
+            assert.equal(ppu.status & 0x20, 0x20);
             
             ppu.status &= ~0x20; // Clear sprite overflow
-            assert.isFalse(ppu.status & 0x20);
+            assert.equal(ppu.status & 0x20, 0);
         });
     });
 
@@ -238,7 +241,7 @@ describe("PPU", function() {
             ppu.writeRegister(0x05, 0x5B); // Second write (Y = 91)
             
             // Check if fine Y is set correctly in tempAddr
-            assert.isTrue(ppu.tempAddr & 0x7000); // Fine Y bits should be set
+            assert.equal(ppu.tempAddr & 0x7000, 0x7000); // Fine Y bits should be set
         });
 
         it("should handle scroll write sequence correctly", function() {
@@ -261,7 +264,7 @@ describe("PPU", function() {
             ppu.writeRegister(0x06, 0x21);
             
             // High byte should be stored in temp address
-            assert.isTrue(ppu.tempAddr & 0x2000); // Bit 13 should be set
+            assert.equal(ppu.tempAddr & 0x2000, 0x2000); // Bit 13 should be set
         });
 
         it("should handle low byte on second write", function() {
@@ -287,9 +290,10 @@ describe("PPU", function() {
             ppu.addr = 0x2000;
         });
 
-        it("should write data to VRAM", function() {
+it("should write data to VRAM", function() {
+            ppu.addr = 0x2000;
             ppu.writeRegister(0x07, 0x42);
-            assert.equal(bus.read(0x2000), 0x42);
+            assert.equal(ppu.ppuRead(0x2000), 0x42);
         });
 
         it("should increment address after write based on control bit", function() {
@@ -306,8 +310,9 @@ describe("PPU", function() {
 
         it("should use read buffer for normal VRAM reads", function() {
             // Set up some VRAM data
-            bus.write(0x2000, 0x12);
-            bus.write(0x2001, 0x34);
+            ppu.ppuWrite(0x2000, 0x12);
+            ppu.ppuWrite(0x2001, 0x34);
+            ppu.addr = 0x2000;
             
             // First read should return buffered value (usually previous)
             const firstRead = ppu.readRegister(0x07);

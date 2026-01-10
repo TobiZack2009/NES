@@ -8,8 +8,8 @@
     "build": "rollup -c",
     "dev": "rollup -c -w",
     "serve": "python3 -m http.server 8000",
-    "test": "node --experimental-modules node_modules/.bin/mocha test/**/*.spec.js",
-    "test:watch": "mocha -w test/**/*.spec.js",
+    "test": "node --experimental-modules node_modules/.bin/mocha tests/**/*.spec.js",
+    "test:watch": "mocha -w tests/**/*.spec.js",
     "test:cpu": "node --experimental-modules tests/cpu/cpu-test.mjs run 100",
     "test:cpu-full": "node --experimental-modules tests/cpu/cpu-test.mjs run 1000",
     "test:cpu-debug": "node --experimental-modules tests/cpu/cpu-test.mjs single 1"
