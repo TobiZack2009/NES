@@ -30,12 +30,12 @@ class CPUTestRunner {
         this.nes = new NES();
         
         // Load nestest.log
-        const logText = readFileSync('./tests/nestest.log', 'utf8');
+        const logText = readFileSync('../../tests/nestest.log', 'utf8');
         await this.logParser.load(logText);
         console.log(`✅ Loaded ${this.logParser.states.length} CPU states from nestest.log`);
         
         // Load nestest.nes ROM
-        const romData = readFileSync('./tests/nestest.nes');
+        const romData = readFileSync('../../tests/nestest.nes');
         this.nes.load(romData);
         
         // Set PC to C000 (start of nestest)
@@ -70,7 +70,35 @@ class CPUTestRunner {
                 this.nes.step();
             } while (this.nes.cpu.cycles > 0);
             
-            // Compare with expected from the next line
+            // Compare with expected from the next line (skip for last line)
+            if (i >= this.logParser.states.length) {
+                // Last test, no next line to compare with
+                this.testResults.push({
+                    lineNumber: i,
+                    instruction: expectedState.mnemonic + ' ' + expectedState.operand,
+                    address: '$' + expectedState.address.toString(16).toUpperCase().padStart(4, '0'),
+                    matches: true,
+                    expected: {
+                        A: expectedState.A,
+                        X: expectedState.X, 
+                        Y: expectedState.Y,
+                        SP: expectedState.SP,
+                        P: expectedState.P.toString(16).toUpperCase().padStart(2, '0')
+                    },
+                    actual: {
+                        A: this.nes.cpu.a,
+                        X: this.nes.cpu.x,
+                        Y: this.nes.cpu.y, 
+                        SP: this.nes.cpu.stkp,
+                        P: this.nes.cpu.status.toString(16).toUpperCase().padStart(2, '0')
+                    },
+                    differences: []
+                });
+                passed++;
+                process.stdout.write('✓');
+                continue;
+            }
+            
             const comparison = this.logParser.compare(this.nes.cpu, i + 1);
             
             const result = {
@@ -278,7 +306,7 @@ async function main() {
             break;
             
         case 'single':
-            const lineNumber = parseInt(args[0]) || 1;
+            const lineNumber = parseInt(args[1]) || 1;
             await runner.runSingleTest(lineNumber);
             break;
             

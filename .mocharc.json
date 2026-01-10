@@ -1,0 +1,8 @@
+{
+  "timeout": 5000,
+  "recursive": true,
+  "spec": "test/**/*.spec.js",
+  "node-option": [
+    "experimental-specifier-resolution=node"
+  ]
+}

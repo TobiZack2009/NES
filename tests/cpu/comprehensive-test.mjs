@@ -12,12 +12,12 @@ async function main() {
     console.log('🔍 Comprehensive CPU Test Analysis...\n');
     
     // Load nestest.log
-    const logText = readFileSync('/Users/tobizacchaeus/Documents/NES/tests/nestest.log', 'utf8');
+    const logText = readFileSync('../nestest.log', 'utf8');
     await logParser.load(logText);
     console.log(`✅ Loaded ${logParser.states.length} CPU states from nestest.log\n`);
     
     // Load nestest.nes ROM
-    const romData = readFileSync('/Users/tobizacchaeus/Documents/NES/tests/nestest.nes');
+    const romData = readFileSync('../nestest.nes');
     
     const nes = new NES();
     nes.load(romData);

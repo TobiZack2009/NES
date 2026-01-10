@@ -8,13 +8,21 @@
     "build": "rollup -c",
     "dev": "rollup -c -w",
     "serve": "python3 -m http.server 8000",
-    "test": "node --experimental-modules tests/cpu/cpu-test.mjs run 100",
-    "test-full": "node --experimental-modules tests/cpu/cpu-test.mjs run 1000",
-    "test-debug": "node --experimental-modules tests/cpu/cpu-test.mjs single 1"
+    "test": "node --experimental-modules node_modules/.bin/mocha test/**/*.spec.js",
+    "test:watch": "mocha -w test/**/*.spec.js",
+    "test:cpu": "node --experimental-modules tests/cpu/cpu-test.mjs run 100",
+    "test:cpu-full": "node --experimental-modules tests/cpu/cpu-test.mjs run 1000",
+    "test:cpu-debug": "node --experimental-modules tests/cpu/cpu-test.mjs single 1"
   },
   "devDependencies": {
+    "@babel/core": "^7.28.5",
+    "@babel/preset-env": "^7.28.5",
+    "@babel/register": "^7.28.3",
     "@rollup/plugin-commonjs": "^25.0.0",
     "@rollup/plugin-node-resolve": "^15.0.0",
-    "rollup": "^3.0.0"
+    "chai": "^5.3.3",
+    "mocha": "^11.7.5",
+    "rollup": "^3.0.0",
+    "sinon": "^21.0.1"
   }
 }
