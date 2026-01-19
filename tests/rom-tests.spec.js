@@ -6,25 +6,42 @@ import { Cartridge } from '../src/cartridge.js';
 
 describe("NES ROM Tests", function() {
   describe("croom ROM", function() {
-    it("loads croom ROM and runs a frame", function(done) {
-      var onFrame = sinon.spy();
+it("loads croom ROM and runs a frame", function(done) {
       var nes = new NES();
-      fs.readFile("ROMS/croom/croom.nes", function(err, data) {
+      fs.readFile("tests/ROMS/croom/croom.nes", function(err, data) {
         if (err) return done(err);
         nes.load(data);
         // Run a full frame (261 scanlines * 341 cycles per scanline)
         for (let i = 0; i < 261 * 341; i++) {
           nes.clock();
         }
-        assert.isArray(nes.ppu.getScreen());
-        assert.lengthOf(nes.ppu.getScreen(), 256 * 240 * 4);
+        const screen = nes.ppu.getScreen();
+        assert.isTrue(screen instanceof Uint8Array || Array.isArray(screen));
+assert.lengthOf(screen, 256 * 240 * 4);
         done();
       });
     });
 
+    it("loads lj65 ROM and runs a frame", function(done) {
+      var nes = new NES();
+      fs.readFile("tests/ROMS/lj65/lj65.nes", function(err, data) {
+        if (err) return done(err);
+        nes.load(data);
+        // Run a full frame
+        for (let i = 0; i < 261 * 341; i++) {
+          nes.clock();
+        }
+        const screen = nes.ppu.getScreen();
+        assert.isTrue(screen instanceof Uint8Array || Array.isArray(screen));
+        assert.lengthOf(screen, 256 * 240 * 4);
+        done();
+      });
+    });
+  });
+
     it("generates the correct frame buffer for croom", function(done) {
       var nes = new NES();
-      fs.readFile("ROMS/croom/croom.nes", function(err, data) {
+      fs.readFile("tests/ROMS/croom/croom.nes", function(err, data) {
         if (err) return done(err);
         nes.load(data);
         
@@ -35,34 +52,18 @@ describe("NES ROM Tests", function() {
           }
         }
         
-        // Check that we get a frame buffer
+// Check that we get a frame buffer
         const screen = nes.ppu.getScreen();
-        assert.isArray(screen);
+        // Screen can be Uint8Array or Array depending on implementation
+        assert.isTrue(screen instanceof Uint8Array || Array.isArray(screen));
         assert.lengthOf(screen, 256 * 240 * 4);
-        done();
-      });
-    });
-  });
-
-  describe("lj65 ROM", function() {
-    it("loads lj65 ROM and runs a frame", function(done) {
-      var nes = new NES();
-      fs.readFile("ROMS/lj65/lj65.nes", function(err, data) {
-        if (err) return done(err);
-        nes.load(data);
-        // Run a full frame
-        for (let i = 0; i < 261 * 341; i++) {
-          nes.clock();
-        }
-        assert.isArray(nes.ppu.getScreen());
-        assert.lengthOf(nes.ppu.getScreen(), 256 * 240 * 4);
         done();
       });
     });
 
     it("generates frame buffer for lj65", function(done) {
       var nes = new NES();
-      fs.readFile("ROMS/lj65/lj65.nes", function(err, data) {
+      fs.readFile("tests/ROMS/lj65/lj65.nes", function(err, data) {
         if (err) return done(err);
         nes.load(data);
         // Run multiple frames to ensure the ROM is executing
@@ -72,7 +73,8 @@ describe("NES ROM Tests", function() {
           }
         }
         const screen = nes.ppu.getScreen();
-        assert.isArray(screen);
+        // Screen can be Uint8Array or Array depending on implementation
+        assert.isTrue(screen instanceof Uint8Array || Array.isArray(screen));
         assert.lengthOf(screen, 256 * 240 * 4);
         done();
       });
@@ -89,7 +91,7 @@ describe("NES ROM Tests", function() {
 
     it("validates croom ROM format", function(done) {
       var nes = new NES();
-      fs.readFile("ROMS/croom/croom.nes", function(err, data) {
+      fs.readFile("tests/ROMS/croom/croom.nes", function(err, data) {
         if (err) return done(err);
         // Should not throw an error for valid ROM
         assert.doesNotThrow(function() {
@@ -101,7 +103,7 @@ describe("NES ROM Tests", function() {
 
     it("validates lj65 ROM format", function(done) {
       var nes = new NES();
-      fs.readFile("ROMS/lj65/lj65.nes", function(err, data) {
+      fs.readFile("tests/ROMS/lj65/lj65.nes", function(err, data) {
         if (err) return done(err);
         // Should not throw an error for valid ROM
         assert.doesNotThrow(function() {
@@ -115,7 +117,7 @@ describe("NES ROM Tests", function() {
   describe("FPS Performance", function() {
     it("returns FPS count for croom ROM", function(done) {
       var nes = new NES();
-      fs.readFile("ROMS/croom/croom.nes", function(err, data) {
+      fs.readFile("tests/ROMS/croom/croom.nes", function(err, data) {
         if (err) return done(err);
         nes.load(data);
         
@@ -132,7 +134,7 @@ describe("NES ROM Tests", function() {
 
     it("returns FPS count for lj65 ROM", function(done) {
       var nes = new NES();
-      fs.readFile("ROMS/lj65/lj65.nes", function(err, data) {
+      fs.readFile("tests/ROMS/lj65/lj65.nes", function(err, data) {
         if (err) return done(err);
         nes.load(data);
         
@@ -145,6 +147,5 @@ describe("NES ROM Tests", function() {
         assert.isTrue(nes.cpu.cycles >= 0);
         done();
       });
-    });
-  });
 });
+  });

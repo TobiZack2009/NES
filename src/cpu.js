@@ -170,7 +170,7 @@ export class CPU {
         this.y = state.Y;
         this.stkp = state.SP;
         this.status = state.P;
-        this.pc = state.address;
+        this.pc = state.PC;
     }
     
     clock() {

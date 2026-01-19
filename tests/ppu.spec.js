@@ -75,7 +75,7 @@ describe("PPU", function() {
         });
 
         it("should handle multiple flags simultaneously", function() {
-            ppu.writeRegister(0x00, 0x9F); // All bits set except bit 6
+            ppu.writeRegister(0x00, 0xBF); // All bits set except bit 6
             assert.equal(ppu.control & 0x80, 0x80); // NMI enable
             assert.equal(ppu.control & 0x20, 0x20); // Sprite size
             assert.equal(ppu.control & 0x10, 0x10); // BG pattern table
@@ -147,12 +147,12 @@ describe("PPU", function() {
         it("should clear VBlank flag on read", function() {
             // Set VBlank flag manually
             ppu.status |= 0x80;
-            assert.isTrue(ppu.status & 0x80);
+            assert.equal(ppu.status & 0x80, 0x80);
             
             // Reading should clear VBlank flag
             const status = ppu.readRegister(0x02);
-            assert.isTrue(status & 0x80); // Should be set in returned value
-            assert.isFalse(ppu.status & 0x80); // Should be cleared internally
+            assert.equal(status & 0x80, 0x80); // Should be set in returned value
+            assert.equal(ppu.status & 0x80, 0); // Should be cleared internally
         });
 
         it("should set and clear sprite 0 hit flag", function() {
@@ -241,7 +241,7 @@ describe("PPU", function() {
             ppu.writeRegister(0x05, 0x5B); // Second write (Y = 91)
             
             // Check if fine Y is set correctly in tempAddr
-            assert.equal(ppu.tempAddr & 0x7000, 0x7000); // Fine Y bits should be set
+            assert.equal(ppu.tempVramAddr & 0x7000, 0x3000); // Fine Y bits should be set (0x5B has fine Y = 3)
         });
 
         it("should handle scroll write sequence correctly", function() {
@@ -264,7 +264,7 @@ describe("PPU", function() {
             ppu.writeRegister(0x06, 0x21);
             
             // High byte should be stored in temp address
-            assert.equal(ppu.tempAddr & 0x2000, 0x2000); // Bit 13 should be set
+            assert.equal(ppu.tempVramAddr & 0x2000, 0x2000); // Bit 13 should be set
         });
 
         it("should handle low byte on second write", function() {
@@ -272,7 +272,7 @@ describe("PPU", function() {
             ppu.writeRegister(0x06, 0x08); // Low byte
             
             // Should transfer to main address register
-            assert.equal(ppu.addr, 0x2108);
+            assert.equal(ppu.vramAddr, 0x2108);
         });
 
         it("should handle full address write sequence", function() {
@@ -281,38 +281,38 @@ describe("PPU", function() {
             // Write low byte
             ppu.writeRegister(0x06, 0x10);
             
-            assert.equal(ppu.addr, 0x3F10);
+            assert.equal(ppu.vramAddr, 0x3F10);
         });
     });
 
     describe("PPUDATA ($2007) - VRAM Data Read/Write", function() {
         beforeEach(function() {
-            ppu.addr = 0x2000;
+            ppu.vramAddr = 0x2000;
         });
 
-it("should write data to VRAM", function() {
-            ppu.addr = 0x2000;
+        it("should write data to VRAM", function() {
+            ppu.vramAddr = 0x2000;
             ppu.writeRegister(0x07, 0x42);
             assert.equal(ppu.ppuRead(0x2000), 0x42);
         });
 
         it("should increment address after write based on control bit", function() {
             ppu.writeRegister(0x00, 0x00); // Increment by 1
-            ppu.addr = 0x2000;
+            ppu.vramAddr = 0x2000;
             ppu.writeRegister(0x07, 0x11);
-            assert.equal(ppu.addr, 0x2001);
+            assert.equal(ppu.vramAddr, 0x2001);
             
             ppu.writeRegister(0x00, 0x04); // Increment by 32
-            ppu.addr = 0x2000;
+            ppu.vramAddr = 0x2000;
             ppu.writeRegister(0x07, 0x22);
-            assert.equal(ppu.addr, 0x2020);
+            assert.equal(ppu.vramAddr, 0x2020);
         });
 
         it("should use read buffer for normal VRAM reads", function() {
             // Set up some VRAM data
             ppu.ppuWrite(0x2000, 0x12);
             ppu.ppuWrite(0x2001, 0x34);
-            ppu.addr = 0x2000;
+            ppu.vramAddr = 0x2000;
             
             // First read should return buffered value (usually previous)
             const firstRead = ppu.readRegister(0x07);
@@ -356,7 +356,7 @@ it("should write data to VRAM", function() {
     describe("Memory Mirroring", function() {
         it("should mirror VRAM addresses correctly", function() {
             // Test that PPU properly mirrors addresses through the bus
-            ppu.addr = 0x3000;
+            ppu.vramAddr = 0x3000;
             const value = ppu.ppuRead(0x3000);
             
             // Should mirror 0x3000 to 0x2000 range
@@ -369,7 +369,7 @@ it("should write data to VRAM", function() {
             
             // Reading from palette should return immediate value
             const addr = 0x3F00;
-            ppu.addr = addr;
+            ppu.vramAddr = addr;
             const value = ppu.ppuRead(addr);
             assert.equal(value, 0x12);
         });

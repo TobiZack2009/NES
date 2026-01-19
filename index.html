@@ -494,8 +494,8 @@
                 <tr><td class="label">X:</td><td>0x${cpu.x.toString(16).toUpperCase().padStart(2, '0')}</td></tr>
                 <tr><td class="label">Y:</td><td>0x${cpu.y.toString(16).toUpperCase().padStart(2, '0')}</td></tr>
                 <tr><td class="label">SP:</td><td>0x${cpu.stkp.toString(16).toUpperCase().padStart(2, '0')}</td></tr>
-                ${ppu ? `<tr><td class="label">Scroll:</td><td>${ppu.fineX}, ${(ppu.addr >> 5) & 0x1F} (${(ppu.addr >> 12) & 0x07})</td></tr>` : ''}
-                ${ppu ? `<tr><td class="label">VRAM:</td><td>0x${ppu.addr.toString(16).toUpperCase().padStart(4, '0')}</td></tr>` : ''}
+                ${ppu ? `<tr><td class="label">Scroll:</td><td>${ppu.fineX}, ${(ppu.vramAddr >> 5) & 0x1F} (${(ppu.vramAddr >> 12) & 0x07})</td></tr>` : ''}
+                ${ppu ? `<tr><td class="label">VRAM:</td><td>0x${ppu.vramAddr.toString(16).toUpperCase().padStart(4, '0')}</td></tr>` : ''}
             `;
 
             const flags = [
